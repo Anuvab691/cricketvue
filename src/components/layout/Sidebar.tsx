@@ -1,20 +1,24 @@
-
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Trophy, LayoutDashboard, History, Wallet, Menu, X, Rocket } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Trophy, LayoutDashboard, History, Wallet, Menu, X, Rocket, LogOut, User as UserIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useFirestore, useDoc } from '@/firebase';
+import { useFirestore, useDoc, useAuth, useUser } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
+import { logout } from '@/firebase/auth/auth-service';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export function Sidebar({ userId }: { userId?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const firestore = useFirestore();
+  const auth = useAuth();
+  const { user } = useUser();
 
   const userRef = useMemoFirebase(() => {
     if (!firestore || !userId) return null;
@@ -29,6 +33,12 @@ export function Sidebar({ userId }: { userId?: string }) {
   ];
 
   const tokenBalance = userData?.tokenBalance || 0;
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    await logout(auth);
+    router.push('/login');
+  };
 
   return (
     <>
@@ -49,6 +59,21 @@ export function Sidebar({ userId }: { userId?: string }) {
             </div>
             <span className="text-xl font-bold tracking-tight text-white font-headline">CricketVue</span>
           </div>
+
+          {user && (
+            <div className="mb-8 flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+              <Avatar className="h-10 w-10 border border-primary/20">
+                <AvatarImage src={user.photoURL || undefined} />
+                <AvatarFallback className="bg-primary/20 text-primary">
+                  <UserIcon className="w-5 h-5" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold truncate text-white">{user.displayName || 'Cricket Fan'}</p>
+                <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">Verified Member</p>
+              </div>
+            </div>
+          )}
 
           <div className="mb-8 p-4 bg-secondary/50 rounded-2xl border border-border">
             <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider mb-1">
@@ -79,7 +104,16 @@ export function Sidebar({ userId }: { userId?: string }) {
             ))}
           </nav>
 
-          <div className="mt-auto pt-6 border-t border-border">
+          <div className="mt-auto pt-6 space-y-4">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
+              onClick={handleLogout}
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="font-medium">Sign Out</span>
+            </Button>
+
             <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">
               <p className="text-xs text-primary font-bold uppercase tracking-widest mb-1">Status</p>
               <p className="text-sm text-white flex items-center gap-2">

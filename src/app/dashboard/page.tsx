@@ -7,11 +7,20 @@ import { MatchCard } from '@/components/dashboard/MatchCard';
 import { Trophy, Loader2, Radio } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function Dashboard() {
   const firestore = useFirestore();
   const { user, loading: userLoading } = useUser();
+  const router = useRouter();
   
+  useEffect(() => {
+    if (!userLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, userLoading, router]);
+
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return collection(firestore, 'matches');
@@ -26,6 +35,8 @@ export default function Dashboard() {
       </div>
     );
   }
+
+  if (!user) return null;
 
   const liveMatches = matches?.filter(m => m.status === 'live') || [];
   const upcomingMatches = matches?.filter(m => m.status === 'upcoming') || [];
