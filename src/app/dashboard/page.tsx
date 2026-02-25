@@ -1,19 +1,38 @@
-import { db } from '@/lib/db-mock';
+
+'use client';
+
+import { useFirestore, useCollection, useUser } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchCard } from '@/components/dashboard/MatchCard';
-import { Badge } from '@/components/ui/badge';
-import { Trophy } from 'lucide-react';
+import { Trophy, Loader2 } from 'lucide-react';
+import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 
 export default function Dashboard() {
-  const matches = db.getMatches();
-  const user = db.getUser();
+  const firestore = useFirestore();
+  const { user, loading: userLoading } = useUser();
   
-  const liveMatches = matches.filter(m => m.status === 'live');
-  const upcomingMatches = matches.filter(m => m.status === 'upcoming');
+  const matchesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'matches');
+  }, [firestore]);
+
+  const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
+
+  if (userLoading || matchesLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const liveMatches = matches?.filter(m => m.status === 'live') || [];
+  const upcomingMatches = matches?.filter(m => m.status === 'upcoming') || [];
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar tokenBalance={user.tokenBalance} />
+      <Sidebar userId={user?.uid} />
       
       <main className="flex-1 lg:pl-64 p-8">
         <header className="mb-10">
@@ -45,6 +64,11 @@ export default function Dashboard() {
               <MatchCard key={match.id} match={match} />
             ))}
           </div>
+          {upcomingMatches.length === 0 && liveMatches.length === 0 && (
+            <div className="glass-card p-12 text-center rounded-3xl">
+              <p className="text-muted-foreground italic">No matches scheduled at the moment. Check back soon!</p>
+            </div>
+          )}
         </section>
       </main>
     </div>

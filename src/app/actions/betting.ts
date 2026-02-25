@@ -1,47 +1,47 @@
-'use server';
 
-import { db } from '@/lib/db-mock';
+'use client';
+
+import { doc, setDoc, updateDoc, collection, serverTimestamp, runTransaction, Firestore } from 'firebase/firestore';
 import { generateMatchInsight } from '@/ai/flows/ai-match-insights';
-import { revalidatePath } from 'next/cache';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
-export async function placeBetAction(formData: FormData) {
-  const userId = formData.get('userId') as string;
-  const selectionId = formData.get('selectionId') as string;
-  const marketId = formData.get('marketId') as string;
-  const matchId = formData.get('matchId') as string;
-  const stake = parseFloat(formData.get('stake') as string);
-  const odds = parseFloat(formData.get('odds') as string);
-  const selectionName = formData.get('selectionName') as string;
-  const teamA = formData.get('teamA') as string;
-  const teamB = formData.get('teamB') as string;
-  const betType = formData.get('betType') as 'pre_match' | 'live_micro';
-
-  if (isNaN(stake) || stake <= 0) {
-    return { error: 'Invalid stake amount' };
-  }
+export async function placeBetAction(db: Firestore, userId: string, betData: any) {
+  const userRef = doc(db, 'users', userId);
+  const betRef = doc(collection(db, 'users', userId, 'bets'));
 
   try {
-    const potentialWin = stake * odds;
-    const matchInfo = `${teamA} vs ${teamB}`;
-    
-    db.placeBet({
-      userId,
-      selectionId,
-      matchInfo,
-      selectionName,
-      stake,
-      odds,
-      potentialWin,
-      betType,
+    await runTransaction(db, async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) {
+        throw new Error("User profile not found");
+      }
+
+      const currentBalance = userDoc.data().tokenBalance || 0;
+      if (currentBalance < betData.stake) {
+        throw new Error("Insufficient balance");
+      }
+
+      transaction.update(userRef, {
+        tokenBalance: currentBalance - betData.stake
+      });
+
+      transaction.set(betRef, {
+        ...betData,
+        status: 'open',
+        createdAt: new Date().toISOString()
+      });
     });
 
-    revalidatePath('/dashboard');
-    revalidatePath(`/match/${matchId}`);
-    revalidatePath('/my-bets');
-    
     return { success: true };
   } catch (e: any) {
-    return { error: e.message || 'Failed to place bet' };
+    const permissionError = new FirestorePermissionError({
+      path: betRef.path,
+      operation: 'create',
+      requestResourceData: betData,
+    });
+    errorEmitter.emit('permission-error', permissionError);
+    return { error: e.message };
   }
 }
 
@@ -49,8 +49,31 @@ export async function getAiInsight(teamA: string, teamB: string, status: string)
   return await generateMatchInsight({ teamA, teamB, matchStatus: status });
 }
 
-export async function settleMockBet(betId: string, result: 'won' | 'lost') {
-  db.settleBet(betId, result);
-  revalidatePath('/my-bets');
-  revalidatePath('/dashboard');
+export async function settleMockBet(db: Firestore, userId: string, betId: string, result: 'won' | 'lost', potentialWin: number) {
+  const betRef = doc(db, 'users', userId, 'bets', betId);
+  const userRef = doc(db, 'users', userId);
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const betDoc = await transaction.get(betRef);
+      if (!betDoc.exists()) return;
+      if (betDoc.data().status !== 'open') return;
+
+      transaction.update(betRef, { status: result });
+
+      if (result === 'won') {
+        const userDoc = await transaction.get(userRef);
+        const currentBalance = userDoc.data()?.tokenBalance || 0;
+        transaction.update(userRef, {
+          tokenBalance: currentBalance + potentialWin
+        });
+      }
+    });
+  } catch (e: any) {
+    const permissionError = new FirestorePermissionError({
+      path: betRef.path,
+      operation: 'update',
+    });
+    errorEmitter.emit('permission-error', permissionError);
+  }
 }

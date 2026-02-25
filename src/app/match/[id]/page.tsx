@@ -1,27 +1,65 @@
-import { db } from '@/lib/db-mock';
+
+'use client';
+
+import { useParams } from 'next/navigation';
+import { useFirestore, useDoc, useCollection, useUser } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { BettingPanel } from '@/components/betting/BettingPanel';
 import { AiInsightBox } from '@/components/betting/AiInsightBox';
-import { notFound } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, MapPin } from 'lucide-react';
+import { Calendar, MapPin, Loader2 } from 'lucide-react';
+import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 
-export default function MatchPage({ params }: { params: { id: string } }) {
-  const match = db.getMatchById(params.id);
-  const user = db.getUser();
+export default function MatchPage() {
+  const { id } = useParams();
+  const firestore = useFirestore();
+  const { user } = useUser();
 
-  if (!match) return notFound();
+  const matchRef = useMemoFirebase(() => {
+    if (!firestore || !id) return null;
+    return doc(firestore, 'matches', id as string);
+  }, [firestore, id]);
+
+  const marketsQuery = useMemoFirebase(() => {
+    if (!firestore || !id) return null;
+    return collection(firestore, 'matches', id as string, 'markets');
+  }, [firestore, id]);
+
+  const { data: match, loading: matchLoading } = useDoc(matchRef);
+  const { data: markets, loading: marketsLoading } = useCollection(marketsQuery);
+
+  if (matchLoading || marketsLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!match) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-white">
+        Match not found.
+      </div>
+    );
+  }
+
+  const enhancedMatch = {
+    ...match,
+    markets: markets || []
+  };
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar tokenBalance={user.tokenBalance} />
+      <Sidebar userId={user?.uid} />
       
       <main className="flex-1 lg:pl-64 p-4 lg:p-8">
         <div className="max-w-5xl mx-auto">
           <div className="mb-8 p-8 rounded-3xl bg-gradient-to-br from-primary/20 via-background to-accent/10 border border-white/5 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4">
               <Badge className={match.status === 'live' ? 'bg-red-500' : ''}>
-                {match.status.toUpperCase()}
+                {match.status?.toUpperCase()}
               </Badge>
             </div>
             
@@ -38,16 +76,28 @@ export default function MatchPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
               
+              {match.currentScore && (
+                <div className="mb-4 text-2xl font-bold text-accent">
+                  {match.currentScore}
+                </div>
+              )}
+              
               <div className="flex gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {new Date(match.startTime).toLocaleDateString()}</span>
-                <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> International Stadium</span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-4 h-4" /> 
+                  {match.startTime ? new Date(match.startTime).toLocaleDateString() : 'TBD'}
+                </span>
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-4 h-4" /> 
+                  {match.venue || 'International Stadium'}
+                </span>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
-              <BettingPanel match={match} userId={user.id} />
+              <BettingPanel match={enhancedMatch} userId={user?.uid || ''} />
             </div>
             <div className="space-y-6">
               <AiInsightBox teamA={match.teamA} teamB={match.teamB} status={match.status} />
@@ -58,7 +108,7 @@ export default function MatchPage({ params }: { params: { id: string } }) {
                   Match Highlights
                 </h3>
                 <div className="space-y-4 text-sm text-muted-foreground">
-                  <p>• Recent head-to-head: {match.teamA} won 3 of last 5.</p>
+                  <p>• Live real-time updates connected via Firestore.</p>
                   <p>• Pitch conditions: Dry and favorable for spinners.</p>
                   <p>• Weather: Clear skies, 28°C.</p>
                 </div>

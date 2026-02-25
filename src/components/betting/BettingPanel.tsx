@@ -1,34 +1,44 @@
+
 'use client';
 
-import { Match, Market } from '@/lib/db-mock';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { placeBetAction } from '@/app/actions/betting';
 import { toast } from '@/hooks/use-toast';
 import { Zap, Trophy } from 'lucide-react';
+import { useFirestore } from '@/firebase';
 
-export function BettingPanel({ match, userId }: { match: Match, userId: string }) {
+export function BettingPanel({ match, userId }: { match: any, userId: string }) {
   const [stake, setStake] = useState<string>('100');
   const [loading, setLoading] = useState(false);
+  const firestore = useFirestore();
 
-  const handlePlaceBet = async (market: Market, selection: any) => {
+  const handlePlaceBet = async (market: any, selection: any) => {
+    if (!firestore || !userId) {
+      toast({ title: 'Error', description: 'You must be logged in to place a bet', variant: 'destructive' });
+      return;
+    }
+
     setLoading(true);
-    const formData = new FormData();
-    formData.append('userId', userId);
-    formData.append('selectionId', selection.id);
-    formData.append('marketId', market.id);
-    formData.append('matchId', match.id);
-    formData.append('stake', stake);
-    formData.append('odds', selection.odds.toString());
-    formData.append('selectionName', selection.name);
-    formData.append('teamA', match.teamA);
-    formData.append('teamB', match.teamB);
-    formData.append('betType', market.type === 'next_ball' ? 'live_micro' : 'pre_match');
+    const stakeVal = parseFloat(stake);
+    
+    const betData = {
+      userId,
+      matchId: match.id,
+      selectionId: selection.id,
+      marketId: market.id,
+      matchInfo: `${match.teamA} vs ${match.teamB}`,
+      selectionName: selection.name,
+      stake: stakeVal,
+      odds: selection.odds,
+      potentialWin: stakeVal * selection.odds,
+      betType: market.type === 'next_ball' ? 'live_micro' : 'pre_match'
+    };
 
-    const result = await placeBetAction(formData);
+    const result = await placeBetAction(firestore, userId, betData);
     setLoading(false);
 
     if (result.error) {
@@ -76,9 +86,9 @@ export function BettingPanel({ match, userId }: { match: Match, userId: string }
         </TabsList>
 
         <TabsContent value="match_winner" className="space-y-4">
-          {match.markets.filter(m => m.type === 'match_winner').map(market => (
+          {match.markets?.filter((m: any) => m.type === 'match_winner').map((market: any) => (
             <div key={market.id} className="grid grid-cols-2 gap-4">
-              {market.selections.map(selection => (
+              {market.selections.map((selection: any) => (
                 <Card key={selection.id} className="glass-card overflow-hidden">
                   <CardContent className="p-6">
                     <div className="flex justify-between items-center mb-4">
@@ -109,9 +119,9 @@ export function BettingPanel({ match, userId }: { match: Match, userId: string }
               <Zap className="w-4 h-4 animate-pulse" /> Live markets are currently open for the next delivery.
             </p>
           </div>
-          {match.markets.filter(m => m.type === 'next_ball').map(market => (
+          {match.markets?.filter((m: any) => m.type === 'next_ball').map((market: any) => (
             <div key={market.id} className="grid grid-cols-2 gap-4">
-              {market.selections.map(selection => (
+              {market.selections.map((selection: any) => (
                 <Card key={selection.id} className="glass-card overflow-hidden border-accent/20">
                   <CardContent className="p-6">
                     <div className="flex justify-between items-center mb-4">

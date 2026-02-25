@@ -1,0 +1,87 @@
+
+{
+  "entities": {
+    "Match": {
+      "title": "Match",
+      "description": "A cricket match with live scoring information.",
+      "type": "object",
+      "properties": {
+        "teamA": { "type": "string" },
+        "teamB": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "finished"] },
+        "currentScore": { "type": "string", "description": "Live score description (e.g., 145/3 (18.2 ov))" },
+        "venue": { "type": "string" }
+      },
+      "required": ["teamA", "teamB", "startTime", "status"]
+    },
+    "Market": {
+      "title": "Market",
+      "description": "A betting market associated with a match.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["match_winner", "next_ball"] },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "selections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "odds": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile including virtual token balance.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "tokenBalance": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      }
+    },
+    "Bet": {
+      "title": "Bet",
+      "description": "A record of a bet placed by a user.",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string" },
+        "matchInfo": { "type": "string" },
+        "selectionId": { "type": "string" },
+        "selectionName": { "type": "string" },
+        "stake": { "type": "number" },
+        "odds": { "type": "number" },
+        "potentialWin": { "type": "number" },
+        "status": { "type": "string", "enum": ["open", "won", "lost"] },
+        "betType": { "type": "string", "enum": ["pre_match", "live_micro"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["google.com"]
+  },
+  "firestore": {
+    "/matches/{matchId}": {
+      "schema": "#/entities/Match",
+      "description": "Collection of all cricket matches."
+    },
+    "/matches/{matchId}/markets/{marketId}": {
+      "schema": "#/entities/Market",
+      "description": "Sub-collection for betting markets per match."
+    },
+    "/users/{userId}": {
+      "schema": "#/entities/UserProfile",
+      "description": "User profile data."
+    },
+    "/users/{userId}/bets/{betId}": {
+      "schema": "#/entities/Bet",
+      "description": "User's history of placed bets."
+    }
+  }
+}

@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -6,15 +7,28 @@ import { Trophy, LayoutDashboard, History, Wallet, Menu, X, Rocket } from 'lucid
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useFirestore, useDoc } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 
-export function Sidebar({ tokenBalance }: { tokenBalance: number }) {
+export function Sidebar({ userId }: { userId?: string }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const firestore = useFirestore();
+
+  const userRef = useMemoFirebase(() => {
+    if (!firestore || !userId) return null;
+    return doc(firestore, 'users', userId);
+  }, [firestore, userId]);
+
+  const { data: userData } = useDoc(userRef);
 
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'My Bets', href: '/my-bets', icon: History },
   ];
+
+  const tokenBalance = userData?.tokenBalance || 0;
 
   return (
     <>
