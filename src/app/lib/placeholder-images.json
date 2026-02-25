@@ -1,0 +1,16 @@
+{
+  "placeholderImages": [
+    {
+      "id": "match-banner-1",
+      "description": "Cricket Match Stadium",
+      "imageUrl": "https://picsum.photos/seed/cricket1/1200/600",
+      "imageHint": "cricket stadium"
+    },
+    {
+      "id": "cricket-ball",
+      "description": "Cricket Ball on Pitch",
+      "imageUrl": "https://picsum.photos/seed/cricket2/600/400",
+      "imageHint": "cricket ball"
+    }
+  ]
+}
