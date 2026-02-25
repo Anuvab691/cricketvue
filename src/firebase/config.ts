@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -7,10 +6,10 @@
  */
 
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "placeholder-api-key",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "placeholder-project.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "placeholder-project",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "placeholder-project.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "placeholder-sender-id",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "placeholder-app-id",
+  apiKey: "AIzaSyAjws2cAhSAot6geSb_2Mf-s1UB59RcZ34",
+  authDomain: "studio-1859577604-7efcb.firebaseapp.com",
+  projectId: "studio-1859577604-7efcb",
+  storageBucket: "studio-1859577604-7efcb.firebasestorage.app",
+  messagingSenderId: "446087491614",
+  appId: "1:446087491614:web:b65dcc09a83829b67e3e0f",
 };
