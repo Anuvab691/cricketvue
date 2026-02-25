@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useFirestore, useCollection, useUser } from '@/firebase';
@@ -14,11 +13,14 @@ import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 export default function MyBetsPage() {
   const firestore = useFirestore();
   const { user } = useUser();
+  
+  // Fallback guest ID
+  const effectiveUserId = user?.uid || 'guest-user-123';
 
   const betsQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'users', user.uid, 'bets'), orderBy('createdAt', 'desc'));
-  }, [firestore, user?.uid]);
+    if (!firestore || !effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'bets'), orderBy('createdAt', 'desc'));
+  }, [firestore, effectiveUserId]);
 
   const { data: bets, loading } = useCollection(betsQuery);
 
@@ -32,7 +34,7 @@ export default function MyBetsPage() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar userId={user?.uid} />
+      <Sidebar userId={effectiveUserId} />
       
       <main className="flex-1 lg:pl-64 p-8">
         <header className="mb-10">
@@ -83,7 +85,7 @@ export default function MyBetsPage() {
                         {bet.status === 'open' && (
                           <SettleAction 
                             betId={bet.id} 
-                            userId={user?.uid || ''} 
+                            userId={effectiveUserId} 
                             potentialWin={bet.potentialWin} 
                           />
                         )}

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Trophy, LayoutDashboard, History, Wallet, Menu, X, Rocket, LogOut, User as UserIcon } from 'lucide-react';
+import { LayoutDashboard, History, Wallet, Menu, X, Rocket, LogOut, User as UserIcon, LogIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { logout } from '@/firebase/auth/auth-service';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-export function Sidebar({ userId }: { userId?: string }) {
+export function Sidebar({ userId }: { userId: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -32,11 +32,12 @@ export function Sidebar({ userId }: { userId?: string }) {
     { name: 'My Bets', href: '/my-bets', icon: History },
   ];
 
-  const tokenBalance = userData?.tokenBalance || 0;
+  const tokenBalance = userData?.tokenBalance || 1000; // Default balance for guests
 
   const handleLogout = async () => {
-    if (!auth) return;
-    await logout(auth);
+    if (auth && user) {
+      await logout(auth);
+    }
     router.push('/login');
   };
 
@@ -60,20 +61,20 @@ export function Sidebar({ userId }: { userId?: string }) {
             <span className="text-xl font-bold tracking-tight text-white font-headline">CricketVue</span>
           </div>
 
-          {user && (
-            <div className="mb-8 flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
-              <Avatar className="h-10 w-10 border border-primary/20">
-                <AvatarImage src={user.photoURL || undefined} />
-                <AvatarFallback className="bg-primary/20 text-primary">
-                  <UserIcon className="w-5 h-5" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold truncate text-white">{user.displayName || 'Cricket Fan'}</p>
-                <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">Verified Member</p>
-              </div>
+          <div className="mb-8 flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+            <Avatar className="h-10 w-10 border border-primary/20">
+              <AvatarImage src={user?.photoURL || undefined} />
+              <AvatarFallback className="bg-primary/20 text-primary">
+                <UserIcon className="w-5 h-5" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold truncate text-white">{user?.displayName || (user ? 'Authenticated User' : 'Guest Fan')}</p>
+              <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">
+                {user ? 'Verified Member' : 'Guest Mode'}
+              </p>
             </div>
-          )}
+          </div>
 
           <div className="mb-8 p-4 bg-secondary/50 rounded-2xl border border-border">
             <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider mb-1">
@@ -107,11 +108,11 @@ export function Sidebar({ userId }: { userId?: string }) {
           <div className="mt-auto pt-6 space-y-4">
             <Button 
               variant="ghost" 
-              className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
+              className="w-full justify-start gap-3 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl"
               onClick={handleLogout}
             >
-              <LogOut className="w-5 h-5" />
-              <span className="font-medium">Sign Out</span>
+              {user ? <LogOut className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+              <span className="font-medium">{user ? 'Sign Out' : 'Sign In'}</span>
             </Button>
 
             <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">

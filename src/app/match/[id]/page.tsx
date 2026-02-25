@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams } from 'next/navigation';
@@ -15,6 +14,9 @@ export default function MatchPage() {
   const { id } = useParams();
   const firestore = useFirestore();
   const { user } = useUser();
+  
+  // Fallback guest ID
+  const effectiveUserId = user?.uid || 'guest-user-123';
 
   const matchRef = useMemoFirebase(() => {
     if (!firestore || !id) return null;
@@ -52,7 +54,7 @@ export default function MatchPage() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar userId={user?.uid} />
+      <Sidebar userId={effectiveUserId} />
       
       <main className="flex-1 lg:pl-64 p-4 lg:p-8">
         <div className="max-w-5xl mx-auto">
@@ -97,7 +99,7 @@ export default function MatchPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
-              <BettingPanel match={enhancedMatch} userId={user?.uid || ''} />
+              <BettingPanel match={enhancedMatch} userId={effectiveUserId} />
             </div>
             <div className="space-y-6">
               <AiInsightBox teamA={match.teamA} teamB={match.teamB} status={match.status} />

@@ -7,19 +7,13 @@ import { MatchCard } from '@/components/dashboard/MatchCard';
 import { Trophy, Loader2, Radio } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 export default function Dashboard() {
   const firestore = useFirestore();
-  const { user, loading: userLoading } = useUser();
-  const router = useRouter();
+  const { user } = useUser();
   
-  useEffect(() => {
-    if (!userLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, userLoading, router]);
+  // Use a fallback guest ID if not logged in
+  const effectiveUserId = user?.uid || 'guest-user-123';
 
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -28,7 +22,7 @@ export default function Dashboard() {
 
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
 
-  if (userLoading || matchesLoading) {
+  if (matchesLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -36,15 +30,13 @@ export default function Dashboard() {
     );
   }
 
-  if (!user) return null;
-
   const liveMatches = matches?.filter(m => m.status === 'live') || [];
   const upcomingMatches = matches?.filter(m => m.status === 'upcoming') || [];
   const finishedMatches = matches?.filter(m => m.status === 'finished') || [];
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      <Sidebar userId={user?.uid} />
+      <Sidebar userId={effectiveUserId} />
       
       <main className="flex-1 lg:pl-64 p-4 lg:p-8">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">

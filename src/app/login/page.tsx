@@ -6,10 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Rocket, Loader2, KeyRound, Mail } from 'lucide-react';
+import { Rocket, Loader2, KeyRound, Mail, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const { user, loading } = useUser();
@@ -62,6 +63,14 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-background to-background">
       <div className="w-full max-w-md space-y-8">
+        <div className="flex justify-start">
+          <Link href="/dashboard">
+            <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+              <ArrowLeft className="w-4 h-4" /> Back to Dashboard (Guest Mode)
+            </Button>
+          </Link>
+        </div>
+
         <div className="text-center space-y-2">
           <div className="inline-flex p-4 bg-primary rounded-2xl shadow-2xl vibrant-glow mb-4">
             <Rocket className="w-10 h-10 text-primary-foreground" />
@@ -136,27 +145,8 @@ export default function LoginPage() {
                 {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
               </button>
             </div>
-            
-            <p className="mt-8 text-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
-              Secure Virtual Betting Platform
-            </p>
           </CardContent>
         </Card>
-
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div className="space-y-1">
-            <p className="text-accent font-black text-lg">Real</p>
-            <p className="text-[10px] text-muted-foreground uppercase font-bold">Data</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-primary font-black text-lg">AI</p>
-            <p className="text-[10px] text-muted-foreground uppercase font-bold">Insights</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-white font-black text-lg">Safe</p>
-            <p className="text-[10px] text-muted-foreground uppercase font-bold">Mock Bets</p>
-          </div>
-        </div>
       </div>
     </div>
   );
