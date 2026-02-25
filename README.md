@@ -1,29 +1,20 @@
-# CricketVue | Premium Cricket Insights
 
-Welcome to your live cricket prediction and insights platform.
+# CivicConnect | CricketVue
 
-## Getting Real Match Data
+The ultimate cricket prediction and insights platform, now connected to real-time data.
 
-To display real-time, actual cricket matches happening right now, follow these steps:
+## Getting Started
 
-1. **Get an API Key**:
-   - Go to [CricketData.org](https://cricketdata.org/) and sign up for a free account.
-   - Copy your **API Key** from your dashboard.
+1. **Authentication**: Sign up or Log in using your email and password.
+2. **Dashboard**: View live and upcoming matches synced from CricAPI.
+3. **Live Insights**: Get AI-powered match predictions and facts.
+4. **Mock Betting**: Use your virtual tokens to place bets on match results and micro-markets.
 
-2. **Configure Environment Variables**:
-   - Create a file named `.env.local` in the root of your project.
-   - Add your key like this:
-     ```
-     CRICKET_API_KEY=your_actual_api_key_here
-     ```
+## Data Synchronization
+Click the **"Refresh Live Scores"** button on the dashboard to pull the latest match data from the CricAPI using your integrated key.
 
-3. **Sync Data**:
-   - Run the app and go to the Dashboard.
-   - Click the **"Refresh Live Scores"** button.
-   - The app will fetch real matches from the API and save them to your Firebase Firestore database.
-
-## Features
-- **Real-time Scores**: Connected via Firebase Firestore listeners.
-- **AI Insights**: Playful match predictions powered by Google Gemini (Genkit).
-- **Virtual Betting**: Place bets using a mock token system.
-- **Admin Settlement**: Manually mark bets as Won/Lost in the "My Bets" section to test the wallet balance.
+## Technical Stack
+- Next.js 15 (App Router)
+- Firebase (Auth & Firestore)
+- Genkit (AI Insights)
+- Tailwind CSS & ShadCN UI

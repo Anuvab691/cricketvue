@@ -1,7 +1,9 @@
+
 'use client';
 
 /**
  * @fileOverview Firebase configuration and initialization.
+ * The environment variables are automatically populated by the Firebase Studio environment.
  */
 
 export const firebaseConfig = {
