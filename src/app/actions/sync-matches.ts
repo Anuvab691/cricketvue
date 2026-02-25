@@ -1,7 +1,7 @@
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, deleteDoc } from 'firebase/firestore';
-import { fetchLiveMatches, ExternalMatch } from '@/services/cricket-api-service';
+import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
+import { fetchLiveMatches } from '@/services/cricket-api-service';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
@@ -30,7 +30,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         venue: m.venue
       };
 
-      // We initiate the write
+      // We initiate the write without await to leverage optimistic UI/caching
       setDoc(matchRef, matchData, { merge: true })
         .catch(async (serverError) => {
           const permissionError = new FirestorePermissionError({
@@ -41,11 +41,18 @@ export async function syncCricketMatchesAction(db: Firestore) {
           errorEmitter.emit('permission-error', permissionError);
         });
         
-      // Also ensure markets exist for these matches if they are new
+      // Ensure markets exist
       const marketsRef = collection(db, 'matches', m.id, 'markets');
-      const marketsSnap = await getDocs(marketsRef);
+      const marketsSnap = await getDocs(marketsRef).catch(async () => {
+         const permissionError = new FirestorePermissionError({
+            path: marketsRef.path,
+            operation: 'list',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+          return null;
+      });
       
-      if (marketsSnap.empty) {
+      if (marketsSnap && marketsSnap.empty) {
         const winnerMarketRef = doc(marketsRef, 'match_winner');
         const winnerData = {
           type: 'match_winner',
@@ -55,7 +62,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
             { id: 'sel_b', name: m.teams[1], odds: 1.90 }
           ]
         };
-        setDoc(winnerMarketRef, winnerData).catch(() => {});
+        setDoc(winnerMarketRef, winnerData).catch(async () => {
+          const permissionError = new FirestorePermissionError({
+            path: winnerMarketRef.path,
+            operation: 'write',
+            requestResourceData: winnerData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
 
         if (matchData.status === 'live') {
           const microMarketRef = doc(marketsRef, 'next_ball');
@@ -68,7 +82,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
               { id: 'wicket', name: 'Wicket', odds: 12.00 }
             ]
           };
-          setDoc(microMarketRef, microData).catch(() => {});
+          setDoc(microMarketRef, microData).catch(async () => {
+            const permissionError = new FirestorePermissionError({
+              path: microMarketRef.path,
+              operation: 'write',
+              requestResourceData: microData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+          });
         }
       }
     });
@@ -76,6 +97,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     await Promise.all(batchPromises);
     return { success: true, count: liveMatches.length };
   } catch (error: any) {
+    // Return standard error to UI while the listener handles the contextual overlay
     return { error: error.message };
   }
 }
