@@ -1,18 +1,25 @@
 'use client';
 
 import { useAuth, useUser } from '@/firebase';
-import { signInWithGoogle } from '@/firebase/auth/auth-service';
+import { loginWithEmail, signUpWithEmail } from '@/firebase/auth/auth-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Rocket, Chrome, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Rocket, Loader2, KeyRound, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { toast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
   const { user, loading } = useUser();
   const auth = useAuth();
   const router = useRouter();
+  
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     if (user && !loading) {
@@ -20,13 +27,25 @@ export default function LoginPage() {
     }
   }, [user, loading, router]);
 
-  const handleLogin = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!auth) return;
+    
     setIsSigningIn(true);
     try {
-      await signInWithGoogle(auth);
-    } catch (error) {
-      // Error is logged in the service
+      if (isSignUp) {
+        await signUpWithEmail(auth, email, password);
+        toast({ title: "Account Created", description: "Welcome to CricketVue!" });
+      } else {
+        await loginWithEmail(auth, email, password);
+        toast({ title: "Welcome Back", description: "Successfully signed in." });
+      }
+    } catch (error: any) {
+      toast({ 
+        title: "Authentication Failed", 
+        description: error.message || "Check your credentials and try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsSigningIn(false);
     }
@@ -53,24 +72,70 @@ export default function LoginPage() {
 
         <Card className="glass-card border-white/10 rounded-3xl overflow-hidden shadow-2xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-bold text-center">Welcome Back</CardTitle>
+            <CardTitle className="text-xl font-bold text-center">
+              {isSignUp ? 'Create Account' : 'Welcome Back'}
+            </CardTitle>
             <CardDescription className="text-center">
-              Sign in to manage your virtual tokens and place bets on live matches.
+              {isSignUp 
+                ? 'Join thousands of fans and start tracking your virtual bets.' 
+                : 'Sign in to manage your virtual tokens and live matches.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
-            <Button 
-              onClick={handleLogin} 
-              disabled={isSigningIn}
-              className="w-full h-12 bg-white text-black hover:bg-white/90 font-bold rounded-xl gap-3 transition-all active:scale-95"
-            >
-              {isSigningIn ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Chrome className="w-5 h-5" />
-              )}
-              Continue with Google
-            </Button>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input 
+                    id="email"
+                    type="email" 
+                    placeholder="name@example.com" 
+                    className="pl-10 h-12 bg-background/50 border-white/10"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input 
+                    id="password"
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="pl-10 h-12 bg-background/50 border-white/10"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <Button 
+                type="submit"
+                disabled={isSigningIn}
+                className="w-full h-12 bg-primary hover:bg-primary/90 font-bold rounded-xl gap-3 transition-all active:scale-95 mt-4"
+              >
+                {isSigningIn ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  isSignUp ? 'Sign Up' : 'Sign In'
+                )}
+              </Button>
+            </form>
+            
+            <div className="mt-6 text-center">
+              <button 
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-sm text-accent hover:underline font-medium"
+              >
+                {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
+              </button>
+            </div>
             
             <p className="mt-8 text-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
               Secure Virtual Betting Platform
