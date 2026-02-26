@@ -64,8 +64,15 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 
 function getMockMatches(): ExternalMatch[] {
   const now = new Date();
-  const tomorrow = new Date(now.getTime() + 86400000);
-  const nextWeek = new Date(now.getTime() + 86400000 * 7);
+  const todayAtNoon = new Date(now);
+  todayAtNoon.setHours(12, 0, 0, 0);
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  tomorrow.setHours(14, 0, 0, 0);
+
+  const nextWeek = new Date(now);
+  nextWeek.setDate(now.getDate() + 7);
 
   return [
     {
@@ -83,17 +90,15 @@ function getMockMatches(): ExternalMatch[] {
       ]
     },
     {
-      id: "live-match-2025-2",
+      id: "today-match-2025-1",
       name: "CSK vs Mumbai Indians",
       matchType: "t20",
-      status: "CSK: 145/3 (14.2 ov)",
+      status: "Upcoming",
       venue: "M. A. Chidambaram Stadium, Chennai",
-      date: now.toISOString(),
+      date: todayAtNoon.toISOString(),
       series: "IPL 2025",
       teams: ["CSK", "Mumbai Indians"],
-      score: [
-        { r: 145, w: 3, o: 14.2, inning: "CSK" }
-      ]
+      score: []
     },
     {
       id: "upcoming-match-2025-1",

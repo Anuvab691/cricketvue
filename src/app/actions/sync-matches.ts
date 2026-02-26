@@ -4,6 +4,7 @@ import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore'
 import { fetchLiveMatches } from '@/services/cricket-api-service';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { parseISO, isBefore } from 'date-fns';
 
 /**
  * Syncs real-world cricket data into our Firestore matches collection.
@@ -11,10 +12,12 @@ import { FirestorePermissionError } from '@/firebase/errors';
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
     const liveMatches = await fetchLiveMatches();
+    const now = new Date();
     
     // We update each match in Firestore
     const batchPromises = liveMatches.map(async (m) => {
       const matchRef = doc(db, 'matches', m.id);
+      const matchTime = parseISO(m.date);
       
       const scoreString = (m.score && m.score.length > 0)
         ? m.score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(' | ')
@@ -22,12 +25,23 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
       const lowerStatus = m.status.toLowerCase();
       
-      // Improved logic for status categorization
+      // Improved logic for status categorization using both text and date
       let status: 'live' | 'upcoming' | 'finished' = 'upcoming';
-      if (lowerStatus.includes('live') || lowerStatus.includes('progress') || lowerStatus.includes('need') || (m.score && m.score.length > 0 && !lowerStatus.includes('won') && !lowerStatus.includes('lost'))) {
+      
+      const isActuallyLive = lowerStatus.includes('live') || lowerStatus.includes('progress') || lowerStatus.includes('need') || (m.score && m.score.length > 0 && !lowerStatus.includes('won') && !lowerStatus.includes('lost') && !lowerStatus.includes('result'));
+      const isActuallyFinished = lowerStatus.includes('won') || lowerStatus.includes('lost') || lowerStatus.includes('result') || lowerStatus.includes('final') || lowerStatus.includes('finished') || lowerStatus.includes('abandoned');
+
+      if (isActuallyLive) {
         status = 'live';
-      } else if (lowerStatus.includes('won') || lowerStatus.includes('lost') || lowerStatus.includes('result') || lowerStatus.includes('final') || lowerStatus.includes('finished')) {
+      } else if (isActuallyFinished) {
         status = 'finished';
+      } else if (isBefore(matchTime, now)) {
+        // If it was supposed to start in the past but has no status/score, check if it's potentially live
+        if (m.score && m.score.length > 0) {
+          status = 'live';
+        } else {
+          status = 'upcoming'; // Or keep as upcoming if waiting for toss
+        }
       }
 
       const matchData = {
