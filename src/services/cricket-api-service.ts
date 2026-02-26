@@ -21,19 +21,14 @@ export interface ExternalMatch {
   }>;
 }
 
+const CRICKET_API_KEY = "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
+
 /**
  * Fetches current matches from cricketdata.org.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
-  const apiKey = process.env.CRICKET_API_KEY;
-
-  if (!apiKey || apiKey === 'placeholder') {
-    console.warn("Cricket Data Sync: No valid API key found. Using high-fidelity mock data.");
-    return getMockMatches();
-  }
-
   try {
-    const response = await fetch(`https://api.cricketdata.org/v1/currentMatches?apikey=${apiKey}`, {
+    const response = await fetch(`https://api.cricketdata.org/v1/currentMatches?apikey=${CRICKET_API_KEY}`, {
       next: { revalidate: 60 } // Cache for 1 minute
     });
     
@@ -44,7 +39,9 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     const json = await response.json();
     
     if (json.status !== 'success') {
-      throw new Error(json.reason || 'Failed to fetch from real API');
+      // If API fails due to key/limit, fallback to mock but log the reason
+      console.warn("Cricket Data API returned non-success status:", json.reason);
+      return getMockMatches();
     }
 
     // Map the API response to our internal ExternalMatch format
