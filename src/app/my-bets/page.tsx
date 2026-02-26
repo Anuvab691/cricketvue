@@ -1,17 +1,58 @@
 'use client';
 
-import { useFirestore, useCollection, useUser } from '@/firebase';
-import { collection, orderBy, query } from 'firebase/firestore';
+import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
+import { collection, orderBy, query, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { History, Loader2, XCircle } from 'lucide-react';
+import { History, Loader2, XCircle, Info } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { Button } from '@/components/ui/button';
 import { cancelBetAction } from '@/app/actions/betting';
 import { toast } from '@/hooks/use-toast';
 import { useState } from 'react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+/**
+ * Component to calculate and display the estimated return if a bet is cancelled.
+ */
+function CancelValueEstimate({ bet }: { bet: any }) {
+  const firestore = useFirestore();
+  const marketRef = useMemoFirebase(() => {
+    if (!firestore || !bet.matchId || !bet.marketId) return null;
+    return doc(firestore, 'matches', bet.matchId, 'markets', bet.marketId);
+  }, [firestore, bet.matchId, bet.marketId]);
+
+  const { data: market, loading } = useDoc(marketRef);
+
+  if (loading) return <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />;
+  if (!market) return <span className="text-muted-foreground">-</span>;
+
+  const selection = market.selections?.find((s: any) => s.id === bet.selectionId);
+  const currentOdds = selection?.odds || bet.odds;
+
+  // Logic: (Original Stake * (Original Odds / Current Odds)) * 0.95
+  const estReturn = (bet.stake * (bet.odds / currentOdds)) * 0.95;
+
+  return (
+    <div className="flex items-center gap-1 font-mono text-xs">
+      <span className={estReturn >= bet.stake ? 'text-green-500' : 'text-orange-400'}>
+        {estReturn.toFixed(2)}
+      </span>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <Info className="w-3 h-3 text-muted-foreground/50" />
+          </TooltipTrigger>
+          <TooltipContent className="text-[10px] max-w-[200px]">
+            Based on current odds ({currentOdds.toFixed(2)}) vs your odds ({bet.odds.toFixed(2)}) minus 5% fee.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
+}
 
 export default function MyBetsPage() {
   const firestore = useFirestore();
@@ -82,6 +123,7 @@ export default function MyBetsPage() {
                     <TableHead>Stake</TableHead>
                     <TableHead>Odds</TableHead>
                     <TableHead>Potential</TableHead>
+                    <TableHead>Est. Cancel Return</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Manage</TableHead>
                   </TableRow>
@@ -94,6 +136,15 @@ export default function MyBetsPage() {
                       <TableCell>{bet.stake}</TableCell>
                       <TableCell>x{bet.odds?.toFixed(2)}</TableCell>
                       <TableCell className="text-accent">{bet.potentialWin?.toFixed(2)}</TableCell>
+                      <TableCell>
+                        {bet.status === 'open' ? (
+                          <CancelValueEstimate bet={bet} />
+                        ) : (
+                          <span className="text-muted-foreground text-[10px] italic">
+                            {bet.returnedAmount ? `Final: ${bet.returnedAmount.toFixed(0)}` : '-'}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge 
                           className={
@@ -132,7 +183,7 @@ export default function MyBetsPage() {
                   ))}
                   {(!bets || bets.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                         No bets placed yet. Visit the Dashboard to start.
                       </TableCell>
                     </TableRow>
