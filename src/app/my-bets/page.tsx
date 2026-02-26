@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { History, Loader2 } from 'lucide-react';
-import { SettleAction } from '@/components/admin/SettleAction';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 
 export default function MyBetsPage() {
@@ -60,7 +59,6 @@ export default function MyBetsPage() {
                     <TableHead>Odds</TableHead>
                     <TableHead>Potential</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -81,20 +79,11 @@ export default function MyBetsPage() {
                           {bet.status?.toUpperCase()}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        {bet.status === 'open' && (
-                          <SettleAction 
-                            betId={bet.id} 
-                            userId={effectiveUserId} 
-                            potentialWin={bet.potentialWin} 
-                          />
-                        )}
-                      </TableCell>
                     </TableRow>
                   ))}
                   {(!bets || bets.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                         No bets placed yet. Visit the Dashboard to start.
                       </TableCell>
                     </TableRow>
