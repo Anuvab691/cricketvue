@@ -7,8 +7,9 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { BettingPanel } from '@/components/betting/BettingPanel';
 import { AiInsightBox } from '@/components/betting/AiInsightBox';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, MapPin, Loader2 } from 'lucide-react';
+import { Calendar, MapPin, Loader2, Clock } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
+import { format } from 'date-fns';
 
 export default function MatchPage() {
   const { id } = useParams();
@@ -52,6 +53,8 @@ export default function MatchPage() {
     markets: markets || []
   };
 
+  const matchDate = match.startTime ? new Date(match.startTime) : null;
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar userId={effectiveUserId} />
@@ -84,13 +87,17 @@ export default function MatchPage() {
                 </div>
               )}
               
-              <div className="flex gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4" /> 
-                  {match.startTime ? new Date(match.startTime).toLocaleDateString() : 'TBD'}
+              <div className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" /> 
+                  {matchDate ? format(matchDate, 'EEEE, MMMM do, yyyy') : 'TBD'}
                 </span>
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-4 h-4" /> 
+                <span className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" /> 
+                  {matchDate ? format(matchDate, 'HH:mm (z)') : 'TBD'}
+                </span>
+                <span className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-primary" /> 
                   {match.venue || 'International Stadium'}
                 </span>
               </div>
@@ -111,8 +118,9 @@ export default function MatchPage() {
                 </h3>
                 <div className="space-y-4 text-sm text-muted-foreground">
                   <p>• Live real-time updates connected via Firestore.</p>
-                  <p>• Pitch conditions: Dry and favorable for spinners.</p>
-                  <p>• Weather: Clear skies, 28°C.</p>
+                  <p>• Match schedule: {matchDate ? format(matchDate, 'p') : 'TBD'}</p>
+                  <p>• Status: {match.status}</p>
+                  <p>• Venue: {match.venue || 'Global Stadium'}</p>
                 </div>
               </div>
             </div>

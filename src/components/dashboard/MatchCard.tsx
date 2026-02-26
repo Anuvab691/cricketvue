@@ -3,13 +3,18 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, Clock, MapPin } from 'lucide-react';
+import { Clock, MapPin, Calendar } from 'lucide-react';
 import Link from 'next/link';
+import { format } from 'date-fns';
 
 export function MatchCard({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const isFinished = match.status === 'finished';
   
+  const matchDate = match.startTime ? new Date(match.startTime) : null;
+  const formattedDate = matchDate ? format(matchDate, 'MMM dd, yyyy') : 'TBD';
+  const formattedTime = matchDate ? format(matchDate, 'HH:mm') : 'TBD';
+
   return (
     <Card className="glass-card overflow-hidden group hover:border-primary/50 transition-all duration-300 relative">
       <CardContent className="p-0">
@@ -24,12 +29,18 @@ export function MatchCard({ match }: { match: any }) {
                 Final
               </Badge>
             ) : (
-              <Badge variant="outline" className="px-3 py-1 text-xs font-bold uppercase tracking-wider border-primary/30">
-                <Clock className="w-3 h-3 mr-1 inline" />
-                {match.startTime ? new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}
-              </Badge>
+              <div className="flex flex-col gap-1">
+                <Badge variant="outline" className="px-3 py-1 text-xs font-bold uppercase tracking-wider border-primary/30 w-fit">
+                  <Calendar className="w-3 h-3 mr-1 inline" />
+                  {formattedDate}
+                </Badge>
+                <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-medium border-primary/10 w-fit opacity-70">
+                  <Clock className="w-2.5 h-2.5 mr-1 inline" />
+                  {formattedTime}
+                </Badge>
+              </div>
             )}
-            <div className="flex gap-1 items-center">
+            <div className="flex gap-1 items-center self-start">
               <MapPin className="w-3 h-3 text-muted-foreground" />
               <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[100px]">{match.venue || 'Global Venue'}</span>
             </div>
