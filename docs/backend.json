@@ -12,7 +12,8 @@
         "status": { "type": "string", "enum": ["upcoming", "live", "finished"] },
         "statusText": { "type": "string", "description": "The descriptive status or result of the match (e.g., India won by 6 wickets)." },
         "currentScore": { "type": "string", "description": "Live score description (e.g., 145/3 (18.2 ov))" },
-        "venue": { "type": "string" }
+        "venue": { "type": "string" },
+        "series": { "type": "string" }
       },
       "required": ["teamA", "teamB", "startTime", "status"]
     },
@@ -58,9 +59,18 @@
         "stake": { "type": "number" },
         "odds": { "type": "number" },
         "potentialWin": { "type": "number" },
-        "status": { "type": "string", "enum": ["open", "won", "lost"] },
+        "status": { "type": "string", "enum": ["open", "won", "lost", "cancelled"] },
         "betType": { "type": "string", "enum": ["pre_match", "live_micro"] },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "returnedAmount": { "type": "number" }
+      }
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global application settings and metadata.",
+      "type": "object",
+      "properties": {
+        "lastGlobalSync": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -83,6 +93,10 @@
     "/users/{userId}/bets/{betId}": {
       "schema": "#/entities/Bet",
       "description": "User's history of placed bets."
+    },
+    "/app_settings/{settingId}": {
+      "schema": "#/entities/AppSettings",
+      "description": "Global settings like last sync time."
     }
   }
 }
