@@ -88,7 +88,7 @@ export async function settleMockBet(db: Firestore, userId: string, betId: string
 }
 
 /**
- * Cancels a bet and returns a portion of the stake based on current odds.
+ * Cancels a bet and returns tokens based on current odds with a 5% deduction.
  */
 export async function cancelBetAction(db: Firestore, userId: string, betId: string) {
   const betRef = doc(db, 'users', userId, 'bets', betId);
@@ -99,9 +99,9 @@ export async function cancelBetAction(db: Firestore, userId: string, betId: stri
       const betDoc = await transaction.get(betRef);
       if (!betDoc.exists()) throw new Error("Bet not found");
       const betData = betDoc.data();
-      if (betData.status !== 'open') throw new Error("Bet is already settled");
+      if (betData.status !== 'open') throw new Error("Bet is already settled or cancelled");
 
-      // Fetch current odds from the market
+      // Fetch current odds from the market to determine current rate value
       const marketRef = doc(db, 'matches', betData.matchId, 'markets', betData.marketId);
       const marketDoc = await transaction.get(marketRef);
       
@@ -114,16 +114,20 @@ export async function cancelBetAction(db: Firestore, userId: string, betId: stri
         }
       }
 
-      // Calculate Cash Out Value: Original Stake * (Original Odds / Current Odds)
-      // We apply a 5% margin for the "house"
-      const cashOutValue = (betData.stake * (betData.odds / currentOdds)) * 0.95;
+      // Calculation: (Original Stake * (Original Odds / Current Odds)) * 0.95
+      // The 0.95 multiplier applies the mandatory 5% deduction
+      const cancelValue = (betData.stake * (betData.odds / currentOdds)) * 0.95;
 
-      transaction.update(betRef, { status: 'cancelled', cashOutValue });
+      transaction.update(betRef, { 
+        status: 'cancelled', 
+        returnedAmount: cancelValue,
+        cancelledAt: new Date().toISOString()
+      });
 
       const userDoc = await transaction.get(userRef);
       const currentBalance = userDoc.data()?.tokenBalance || 0;
       transaction.update(userRef, {
-        tokenBalance: currentBalance + cashOutValue
+        tokenBalance: currentBalance + cancelValue
       });
     });
     return { success: true };

@@ -34,9 +34,16 @@ export default function MyBetsPage() {
     setCancellingId(null);
 
     if (result.success) {
-      toast({ title: 'Bet Cancelled', description: 'Your stake has been returned based on current odds.' });
+      toast({ 
+        title: 'Bet Cancelled', 
+        description: 'Your stake has been returned based on current market rates (minus 5% fee).' 
+      });
     } else {
-      toast({ title: 'Error', description: result.error || 'Failed to cancel bet', variant: 'destructive' });
+      toast({ 
+        title: 'Error', 
+        description: result.error || 'Failed to cancel bet', 
+        variant: 'destructive' 
+      });
     }
   };
 
@@ -112,12 +119,12 @@ export default function MyBetsPage() {
                             ) : (
                               <XCircle className="w-3 h-3" />
                             )}
-                            Cash Out
+                            Cancel Bet
                           </Button>
                         )}
                         {bet.status === 'cancelled' && (
                           <span className="text-[10px] text-muted-foreground italic">
-                            Returned: {bet.cashOutValue?.toFixed(0)}
+                            Returned: {bet.returnedAmount?.toFixed(0)}
                           </span>
                         )}
                       </TableCell>
