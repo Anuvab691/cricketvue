@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -20,6 +21,8 @@ export interface ExternalMatch {
     o: number;
     inning: string;
   }>;
+  matchStarted: boolean;
+  matchEnded: boolean;
 }
 
 const CRICKET_API_KEY = "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
@@ -30,7 +33,7 @@ const CRICKET_API_KEY = "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     const response = await fetch(`https://api.cricketdata.org/v1/currentMatches?apikey=${CRICKET_API_KEY}`, {
-      next: { revalidate: 60 } // Cache for 1 minute
+      next: { revalidate: 30 } // Cache for 30 seconds
     });
     
     if (!response.ok) {
@@ -54,7 +57,9 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       date: m.dateTimeGMT || m.date || new Date().toISOString(),
       series: m.series || 'International Series',
       teams: m.teams || ['Unknown', 'Unknown'],
-      score: m.score || []
+      score: m.score || [],
+      matchStarted: m.matchStarted || false,
+      matchEnded: m.matchEnded || false
     }));
   } catch (error) {
     console.error("Cricket Data Sync Error:", error);
@@ -64,61 +69,51 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 
 function getMockMatches(): ExternalMatch[] {
   const now = new Date();
-  const todayAtNoon = new Date(now);
-  todayAtNoon.setHours(12, 0, 0, 0);
+  
+  const todayMatch = new Date(now);
+  todayMatch.setHours(now.getHours() + 2);
 
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  tomorrow.setHours(14, 0, 0, 0);
-
-  const nextWeek = new Date(now);
-  nextWeek.setDate(now.getDate() + 7);
+  const tomorrowMatch = new Date(now);
+  tomorrowMatch.setDate(now.getDate() + 1);
+  tomorrowMatch.setHours(15, 0, 0, 0);
 
   return [
     {
-      id: "live-match-2025-1",
-      name: "India vs Pakistan - Champions Trophy",
-      matchType: "odi",
-      status: "India needs 12 runs in 8 balls",
-      venue: "Gaddafi Stadium, Lahore",
+      id: "demo-live-1",
+      name: "India vs England",
+      matchType: "t20",
+      status: "India batting: 45/1 (5.2 ov)",
+      venue: "Narendra Modi Stadium, Ahmedabad",
       date: now.toISOString(),
-      series: "ICC Champions Trophy 2025",
-      teams: ["India", "Pakistan"],
-      score: [
-        { r: 285, w: 4, o: 48.4, inning: "India" },
-        { r: 296, w: 9, o: 50, inning: "Pakistan" }
-      ]
+      series: "India vs England T20 Series",
+      teams: ["India", "England"],
+      score: [{ r: 45, w: 1, o: 5.2, inning: "India" }],
+      matchStarted: true,
+      matchEnded: false
     },
     {
-      id: "today-match-2025-1",
-      name: "CSK vs Mumbai Indians",
+      id: "demo-upcoming-1",
+      name: "RCB vs MI",
+      matchType: "t20",
+      status: "Upcoming",
+      venue: "M. Chinnaswamy Stadium, Bengaluru",
+      date: todayMatch.toISOString(),
+      series: "IPL 2025",
+      teams: ["RCB", "MI"],
+      matchStarted: false,
+      matchEnded: false
+    },
+    {
+      id: "demo-upcoming-2",
+      name: "CSK vs GT",
       matchType: "t20",
       status: "Upcoming",
       venue: "M. A. Chidambaram Stadium, Chennai",
-      date: todayAtNoon.toISOString(),
+      date: tomorrowMatch.toISOString(),
       series: "IPL 2025",
-      teams: ["CSK", "Mumbai Indians"],
-      score: []
-    },
-    {
-      id: "upcoming-match-2025-1",
-      name: "Australia vs England - Ashes",
-      matchType: "test",
-      status: "Upcoming",
-      venue: "The Gabba, Brisbane",
-      date: tomorrow.toISOString(),
-      series: "The Ashes 2025",
-      teams: ["Australia", "England"]
-    },
-    {
-      id: "upcoming-match-2025-2",
-      name: "UP Warriorz vs Delhi Capitals",
-      matchType: "t20",
-      status: "Upcoming",
-      venue: "Arun Jaitley Stadium, Delhi",
-      date: nextWeek.toISOString(),
-      series: "WPL 2025",
-      teams: ["UP Warriorz", "Delhi Capitals"]
+      teams: ["CSK", "GT"],
+      matchStarted: false,
+      matchEnded: false
     }
   ];
 }

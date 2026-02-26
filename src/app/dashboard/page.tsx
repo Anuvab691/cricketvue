@@ -1,13 +1,14 @@
+
 'use client';
 
-import { useFirestore, useCollection, useUser } from '@/firebase';
-import { collection, query, orderBy } from 'firebase/firestore';
+import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
+import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchCard } from '@/components/dashboard/MatchCard';
-import { Trophy, Loader2, Radio, Zap, CalendarDays } from 'lucide-react';
+import { Trophy, Loader2, Radio, Zap, CalendarDays, Clock } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
-import { isToday, isTomorrow, parseISO, compareAsc } from 'date-fns';
+import { isToday, isTomorrow, parseISO, compareAsc, format } from 'date-fns';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -17,11 +18,16 @@ export default function Dashboard() {
 
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    // Order by startTime so they appear in chronological order
     return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
   }, [firestore]);
 
+  const settingsRef = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return doc(firestore, 'app_settings', 'global');
+  }, [firestore]);
+
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
+  const { data: settings } = useDoc(settingsRef);
 
   if (matchesLoading) {
     return (
@@ -39,7 +45,7 @@ export default function Dashboard() {
   const todayMatches = sortedMatches.filter(m => m.status === 'upcoming' && isToday(parseISO(m.startTime)));
   const tomorrowMatches = sortedMatches.filter(m => m.status === 'upcoming' && isTomorrow(parseISO(m.startTime)));
   const futureMatches = sortedMatches.filter(m => m.status === 'upcoming' && !isToday(parseISO(m.startTime)) && !isTomorrow(parseISO(m.startTime)));
-  const finishedMatches = sortedMatches.filter(m => m.status === 'finished').reverse(); // Show recent results first
+  const finishedMatches = sortedMatches.filter(m => m.status === 'finished').reverse();
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -51,11 +57,16 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold font-headline mb-2 flex items-center gap-2">
               Match Center
             </h1>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent rounded-full border border-accent/20">
-                <Zap className="w-3 h-3" /> Real-Time Updates
+                <Zap className="w-3 h-3" /> Real-Time API
               </span>
-              <span>• Worldwide Leagues</span>
+              {settings?.lastGlobalSync && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> 
+                  Last Refreshed: {format(new Date(settings.lastGlobalSync), 'HH:mm:ss')}
+                </span>
+              )}
             </div>
           </div>
           <SyncDataButton />
