@@ -6,14 +6,18 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { History, Loader2 } from 'lucide-react';
+import { History, Loader2, XCircle } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
+import { Button } from '@/components/ui/button';
+import { cancelBetAction } from '@/app/actions/betting';
+import { toast } from '@/hooks/use-toast';
+import { useState } from 'react';
 
 export default function MyBetsPage() {
   const firestore = useFirestore();
   const { user } = useUser();
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   
-  // Fallback guest ID
   const effectiveUserId = user?.uid || 'guest-user-123';
 
   const betsQuery = useMemoFirebase(() => {
@@ -22,6 +26,19 @@ export default function MyBetsPage() {
   }, [firestore, effectiveUserId]);
 
   const { data: bets, loading } = useCollection(betsQuery);
+
+  const handleCancelBet = async (betId: string) => {
+    if (!firestore || !effectiveUserId) return;
+    setCancellingId(betId);
+    const result = await cancelBetAction(firestore, effectiveUserId, betId);
+    setCancellingId(null);
+
+    if (result.success) {
+      toast({ title: 'Bet Cancelled', description: 'Your stake has been returned based on current odds.' });
+    } else {
+      toast({ title: 'Error', description: result.error || 'Failed to cancel bet', variant: 'destructive' });
+    }
+  };
 
   if (loading) {
     return (
@@ -32,7 +49,7 @@ export default function MyBetsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background text-foreground">
       <Sidebar userId={effectiveUserId} />
       
       <main className="flex-1 lg:pl-64 p-8">
@@ -59,6 +76,7 @@ export default function MyBetsPage() {
                     <TableHead>Odds</TableHead>
                     <TableHead>Potential</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Manage</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -73,17 +91,41 @@ export default function MyBetsPage() {
                         <Badge 
                           className={
                             bet.status === 'won' ? 'bg-green-500' : 
-                            bet.status === 'lost' ? 'bg-red-500' : 'bg-secondary'
+                            bet.status === 'lost' ? 'bg-red-500' : 
+                            bet.status === 'cancelled' ? 'bg-orange-500' : 'bg-secondary'
                           }
                         >
                           {bet.status?.toUpperCase()}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-right">
+                        {bet.status === 'open' && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1"
+                            onClick={() => handleCancelBet(bet.id)}
+                            disabled={cancellingId === bet.id}
+                          >
+                            {cancellingId === bet.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <XCircle className="w-3 h-3" />
+                            )}
+                            Cash Out
+                          </Button>
+                        )}
+                        {bet.status === 'cancelled' && (
+                          <span className="text-[10px] text-muted-foreground italic">
+                            Returned: {bet.cashOutValue?.toFixed(0)}
+                          </span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {(!bets || bets.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                         No bets placed yet. Visit the Dashboard to start.
                       </TableCell>
                     </TableRow>
