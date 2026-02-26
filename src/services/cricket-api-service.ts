@@ -47,7 +47,6 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     }
 
     // Filter and map the API response to our internal ExternalMatch format
-    // We only take matches that are live or upcoming
     return json.data.map((m: any) => ({
       id: m.id || Math.random().toString(36).substr(2, 9),
       name: m.name || `${m.teams?.[0] || 'Team A'} vs ${m.teams?.[1] || 'Team B'}`,
@@ -69,71 +68,72 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 
 /**
  * Generates mock matches relative to current time to ensure the app always looks "alive" and current.
+ * These are only shown if the real API key has issues or returns empty data.
  */
 function getMockMatches(): ExternalMatch[] {
   const now = new Date();
   
   const todayLive = new Date(now);
-  todayLive.setHours(now.getHours() - 1); // Started an hour ago
+  todayLive.setMinutes(now.getMinutes() - 45); // Started 45 mins ago
 
   const todayUpcoming = new Date(now);
-  todayUpcoming.setHours(now.getHours() + 3);
+  todayUpcoming.setHours(now.getHours() + 2);
 
   const tomorrowMatch = new Date(now);
   tomorrowMatch.setDate(now.getDate() + 1);
-  tomorrowMatch.setHours(14, 30, 0, 0);
+  tomorrowMatch.setHours(14, 0, 0, 0);
 
   const futureMatch = new Date(now);
-  futureMatch.setDate(now.getDate() + 3);
+  futureMatch.setDate(now.getDate() + 4);
   futureMatch.setHours(19, 0, 0, 0);
 
   return [
     {
       id: "mock-live-1",
-      name: "Australia vs South Africa",
+      name: "Mumbai Indians vs Chennai Super Kings",
       matchType: "t20",
-      status: "SA batting: 82/2 (10.4 ov)",
-      venue: "The Wanderers, Johannesburg",
+      status: "CSK: 156/4 (16.2 ov)",
+      venue: "Wankhede Stadium, Mumbai",
       date: todayLive.toISOString(),
-      series: "ICC Champions Trophy 2025",
-      teams: ["South Africa", "Australia"],
-      score: [{ r: 82, w: 2, o: 10.4, inning: "South Africa" }],
+      series: "IPL 2025",
+      teams: ["Mumbai Indians", "CSK"],
+      score: [{ r: 156, w: 4, o: 16.2, inning: "CSK" }],
       matchStarted: true,
       matchEnded: false
     },
     {
       id: "mock-today-1",
-      name: "India vs England",
+      name: "India vs Pakistan",
       matchType: "t20",
       status: "Upcoming",
-      venue: "Wankhede Stadium, Mumbai",
+      venue: "Narendra Modi Stadium, Ahmedabad",
       date: todayUpcoming.toISOString(),
-      series: "India vs England Series 2025",
-      teams: ["India", "England"],
+      series: "Champions Trophy 2025",
+      teams: ["India", "Pakistan"],
       matchStarted: false,
       matchEnded: false
     },
     {
       id: "mock-tomorrow-1",
-      name: "RCB vs Gujarat Titans",
+      name: "RCB vs Kolkata Knight Riders",
       matchType: "t20",
       status: "Upcoming",
       venue: "M. Chinnaswamy Stadium, Bengaluru",
       date: tomorrowMatch.toISOString(),
       series: "IPL 2025",
-      teams: ["RCB", "GT"],
+      teams: ["RCB", "KKR"],
       matchStarted: false,
       matchEnded: false
     },
     {
       id: "mock-future-1",
-      name: "Perth Scorchers vs Sydney Sixers",
+      name: "England vs Australia",
       matchType: "t20",
       status: "Upcoming",
-      venue: "Optus Stadium, Perth",
+      venue: "Lord's, London",
       date: futureMatch.toISOString(),
-      series: "BBL 2025",
-      teams: ["Scorchers", "Sixers"],
+      series: "The Ashes T20 Series",
+      teams: ["England", "Australia"],
       matchStarted: false,
       matchEnded: false
     }
