@@ -12,6 +12,7 @@ export interface ExternalMatch {
   status: string;
   venue: string;
   date: string;
+  series?: string;
   teams: string[];
   score?: Array<{
     r: number;
@@ -39,7 +40,6 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     const json = await response.json();
     
     if (json.status !== 'success') {
-      // If API fails due to key/limit, fallback to mock but log the reason
       console.warn("Cricket Data API returned non-success status:", json.reason);
       return getMockMatches();
     }
@@ -52,12 +52,12 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       status: m.status || 'Scheduled',
       venue: m.venue || 'International Stadium',
       date: m.dateTimeGMT || m.date || new Date().toISOString(),
+      series: m.series || 'International Series', // Some matches might not have series field depending on API version
       teams: m.teams || ['Unknown', 'Unknown'],
       score: m.score || []
     }));
   } catch (error) {
     console.error("Cricket Data Sync Error:", error);
-    // Fallback to mock data if the API call fails so the UI doesn't break
     return getMockMatches();
   }
 }
@@ -71,6 +71,7 @@ function getMockMatches(): ExternalMatch[] {
       status: "Stumps - Day 3",
       venue: "HPCA Stadium, Dharamshala",
       date: new Date().toISOString(),
+      series: "England tour of India",
       teams: ["India", "England"],
       score: [
         { r: 477, w: 10, o: 120.1, inning: "India Inn 1" },
@@ -80,16 +81,37 @@ function getMockMatches(): ExternalMatch[] {
     },
     {
       id: "real-match-102",
-      name: "IPL: Royal Challengers Bangalore vs Gujarat Titans",
+      name: "RCB vs Gujarat Titans",
       matchType: "t20",
       status: "Gujarat Titans need 45 runs in 18 balls",
       venue: "M. Chinnaswamy Stadium, Bengaluru",
+      series: "Indian Premier League (IPL) 2024",
       date: new Date().toISOString(),
       teams: ["RCB", "Gujarat Titans"],
       score: [
         { r: 198, w: 5, o: 20, inning: "RCB" },
         { r: 154, w: 3, o: 17, inning: "GT" }
       ]
+    },
+    {
+      id: "real-match-upcoming-1",
+      name: "Lahore Qalandars vs Islamabad United",
+      matchType: "t20",
+      status: "Upcoming",
+      venue: "Gaddafi Stadium, Lahore",
+      series: "Pakistan Super League (PSL) 2024",
+      date: new Date(Date.now() + 86400000).toISOString(),
+      teams: ["Lahore Qalandars", "Islamabad United"]
+    },
+    {
+      id: "real-match-upcoming-2",
+      name: "Sydney Sixers vs Brisbane Heat",
+      matchType: "t20",
+      status: "Upcoming",
+      venue: "Sydney Cricket Ground",
+      series: "Big Bash League (BBL) 13",
+      date: new Date(Date.now() + 172800000).toISOString(),
+      teams: ["Sydney Sixers", "Brisbane Heat"]
     }
   ];
 }

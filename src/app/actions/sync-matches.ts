@@ -1,4 +1,3 @@
-
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
@@ -25,9 +24,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
         teamA: m.teams[0],
         teamB: m.teams[1],
         startTime: m.date,
-        status: m.status.toLowerCase().includes('progress') ? 'live' : 
-                m.status.toLowerCase().includes('upcoming') ? 'upcoming' : 'finished',
-        statusText: m.status, // Store the full status/result text from the API
+        series: m.series || 'International Series',
+        status: (m.status.toLowerCase().includes('progress') || m.status.toLowerCase().includes('need')) ? 'live' : 
+                (m.status.toLowerCase().includes('upcoming') || m.status.toLowerCase().includes('scheduled') || m.status.toLowerCase() === 'upcoming') ? 'upcoming' : 'finished',
+        statusText: m.status,
         currentScore: scoreString,
         venue: m.venue
       };
