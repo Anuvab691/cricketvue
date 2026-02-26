@@ -1,3 +1,4 @@
+
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
@@ -26,6 +27,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         startTime: m.date,
         status: m.status.toLowerCase().includes('progress') ? 'live' : 
                 m.status.toLowerCase().includes('upcoming') ? 'upcoming' : 'finished',
+        statusText: m.status, // Store the full status/result text from the API
         currentScore: scoreString,
         venue: m.venue
       };
@@ -97,7 +99,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
     await Promise.all(batchPromises);
     return { success: true, count: liveMatches.length };
   } catch (error: any) {
-    // Return standard error to UI while the listener handles the contextual overlay
     return { error: error.message };
   }
 }

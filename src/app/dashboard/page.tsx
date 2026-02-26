@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useFirestore, useCollection, useUser } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchCard } from '@/components/dashboard/MatchCard';
-import { Trophy, Loader2, Radio } from 'lucide-react';
+import { Trophy, Loader2, Radio, Zap } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 
@@ -12,7 +13,6 @@ export default function Dashboard() {
   const firestore = useFirestore();
   const { user } = useUser();
   
-  // Use a fallback guest ID if not logged in
   const effectiveUserId = user?.uid || 'guest-user-123';
 
   const matchesQuery = useMemoFirebase(() => {
@@ -44,7 +44,12 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold font-headline mb-2 flex items-center gap-2">
               Match Center
             </h1>
-            <p className="text-muted-foreground text-sm">Real-time data synchronization active.</p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent rounded-full border border-accent/20">
+                <Zap className="w-3 h-3" /> Real-Time API Connected
+              </span>
+              <span>• Official Sportstrader Updates</span>
+            </div>
           </div>
           <SyncDataButton />
         </header>
@@ -80,10 +85,10 @@ export default function Dashboard() {
         {finishedMatches.length > 0 && (
           <section>
             <div className="flex items-center gap-3 mb-6">
-              <Trophy className="w-5 h-5 text-muted-foreground" />
-              <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">Results</h2>
+              <Trophy className="w-5 h-5 text-green-500" />
+              <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">Recent Results</h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-70">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-90">
               {finishedMatches.map(match => (
                 <MatchCard key={match.id} match={match} />
               ))}
@@ -93,7 +98,7 @@ export default function Dashboard() {
 
         {upcomingMatches.length === 0 && liveMatches.length === 0 && finishedMatches.length === 0 && (
           <div className="glass-card p-12 text-center rounded-3xl">
-            <p className="text-muted-foreground italic">No matches synced yet. Click "Refresh Live Scores" to pull real data.</p>
+            <p className="text-muted-foreground italic">No matches synced yet. Click "Refresh Live Scores" to pull real data from the API.</p>
           </div>
         )}
       </main>

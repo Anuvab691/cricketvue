@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Match": {
@@ -9,6 +10,7 @@
         "teamB": { "type": "string" },
         "startTime": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["upcoming", "live", "finished"] },
+        "statusText": { "type": "string", "description": "The descriptive status or result of the match (e.g., India won by 6 wickets)." },
         "currentScore": { "type": "string", "description": "Live score description (e.g., 145/3 (18.2 ov))" },
         "venue": { "type": "string" }
       },

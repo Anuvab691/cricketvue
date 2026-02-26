@@ -1,9 +1,10 @@
+
 'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Clock, MapPin, Calendar } from 'lucide-react';
+import { Clock, MapPin, Calendar, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 
@@ -25,7 +26,8 @@ export function MatchCard({ match }: { match: any }) {
                 Live
               </Badge>
             ) : isFinished ? (
-              <Badge variant="secondary" className="px-3 py-1 text-xs font-bold uppercase tracking-wider bg-muted">
+              <Badge variant="secondary" className="px-3 py-1 text-xs font-bold uppercase tracking-wider bg-green-500/20 text-green-500 border-green-500/30">
+                <CheckCircle2 className="w-3 h-3 mr-1 inline" />
                 Final
               </Badge>
             ) : (
@@ -56,17 +58,22 @@ export function MatchCard({ match }: { match: any }) {
             </div>
           </div>
 
-          {match.currentScore && (
-            <div className="mb-6 p-3 bg-secondary/30 rounded-xl text-center">
-              <p className="text-xs font-mono text-accent font-bold leading-relaxed">
+          {(match.currentScore || (isFinished && match.statusText)) && (
+            <div className="mb-6 p-3 bg-secondary/30 rounded-xl text-center border border-white/5">
+              <p className="text-[11px] font-mono text-accent font-bold leading-relaxed mb-1">
                 {match.currentScore}
               </p>
+              {isFinished && match.statusText && (
+                <p className="text-[10px] text-muted-foreground italic mt-1 border-t border-white/5 pt-1">
+                  {match.statusText}
+                </p>
+              )}
             </div>
           )}
 
           <Link href={`/match/${match.id}`}>
             <Button className="w-full bg-primary hover:bg-primary/90 rounded-xl py-5 font-bold text-sm group-hover:scale-[1.01] transition-transform">
-              {isFinished ? 'View Result Details' : 'View Markets'}
+              {isFinished ? 'View Final Result' : 'View Markets'}
             </Button>
           </Link>
         </div>
