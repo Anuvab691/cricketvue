@@ -24,6 +24,7 @@ export interface ExternalMatch {
   matchEnded: boolean;
 }
 
+// Using the provided API key for Cricket Data
 const CRICKET_API_KEY = "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
 
 /**
@@ -47,19 +48,22 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     }
 
     // Filter and map the API response to our internal ExternalMatch format
-    return json.data.map((m: any) => ({
-      id: m.id || Math.random().toString(36).substr(2, 9),
-      name: m.name || `${m.teams?.[0] || 'Team A'} vs ${m.teams?.[1] || 'Team B'}`,
-      matchType: m.matchType || 't20',
-      status: m.status || 'Scheduled',
-      venue: m.venue || 'International Stadium',
-      date: m.dateTimeGMT || m.date || new Date().toISOString(),
-      series: m.series || 'International Series',
-      teams: m.teams || ['Unknown', 'Unknown'],
-      score: m.score || [],
-      matchStarted: m.matchStarted || false,
-      matchEnded: m.matchEnded || false
-    }));
+    // Also explicitly filtering out any matches containing "IPL" just in case the API returns them
+    return json.data
+      .filter((m: any) => !m.series?.toLowerCase().includes('ipl') && !m.name?.toLowerCase().includes('ipl'))
+      .map((m: any) => ({
+        id: m.id || Math.random().toString(36).substr(2, 9),
+        name: m.name || `${m.teams?.[0] || 'Team A'} vs ${m.teams?.[1] || 'Team B'}`,
+        matchType: m.matchType || 't20',
+        status: m.status || 'Scheduled',
+        venue: m.venue || 'International Stadium',
+        date: m.dateTimeGMT || m.date || new Date().toISOString(),
+        series: m.series || 'International Series',
+        teams: m.teams || ['Unknown', 'Unknown'],
+        score: m.score || [],
+        matchStarted: m.matchStarted || false,
+        matchEnded: m.matchEnded || false
+      }));
   } catch (error) {
     console.error("Cricket Data Sync Error:", error);
     return getMockMatches();
@@ -68,14 +72,13 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 
 /**
  * Generates mock matches relative to current time to ensure the app always looks "alive" and current.
- * These are only shown if the real API key has issues or returns empty data.
- * Updated to remove IPL and focus on International Fixtures.
+ * Updated to focus purely on International matches as requested.
  */
 function getMockMatches(): ExternalMatch[] {
   const now = new Date();
   
   const todayLive = new Date(now);
-  todayLive.setMinutes(now.getMinutes() - 45); // Started 45 mins ago
+  todayLive.setMinutes(now.getMinutes() - 45); 
 
   const todayUpcoming = new Date(now);
   todayUpcoming.setHours(now.getHours() + 2);
@@ -109,7 +112,7 @@ function getMockMatches(): ExternalMatch[] {
       status: "Upcoming",
       venue: "Wanderers Stadium, Johannesburg",
       date: todayUpcoming.toISOString(),
-      series: "Champions Trophy 2025",
+      series: "ICC Champions Trophy 2025",
       teams: ["South Africa", "Pakistan"],
       matchStarted: false,
       matchEnded: false

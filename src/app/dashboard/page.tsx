@@ -38,18 +38,23 @@ export default function Dashboard() {
 
   const todayStart = startOfToday();
   
-  // Strict filtering: Only show matches that are LIVE or starting TODAY or LATER
+  /**
+   * Filter matches based on current date.
+   * Only show:
+   * 1. Matches happening today (Live or Upcoming)
+   * 2. Matches happening in the future (Tomorrow onwards)
+   * Exclude:
+   * 1. Past matches (before today start)
+   * 2. Finished matches (to keep view clean)
+   */
   const currentAndFutureMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
     
-    // 1. If it's live, show it regardless
-    if (m.status === 'live') return true;
-    
-    // 2. If it's finished, don't show it in the main feed
+    // Explicitly hide finished games to focus on current/upcoming
     if (m.status === 'finished') return false;
     
-    // 3. Show if the match is today or in the future
+    // Only show if the match is today or in the future
     return isToday(matchTime) || isAfter(matchTime, todayStart);
   });
 
@@ -136,7 +141,7 @@ export default function Dashboard() {
           <section className="mb-12">
             <div className="flex items-center gap-3 mb-6 border-b border-border/50 pb-4">
               <Clock className="w-5 h-5 text-muted-foreground opacity-50" />
-              <h2 className="text-xl font-bold uppercase tracking-tighter text-muted-foreground opacity-50 italic">Upcoming Leagues</h2>
+              <h2 className="text-xl font-bold uppercase tracking-tighter text-muted-foreground opacity-50 italic">Upcoming Series</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {futureMatches.map(match => (
@@ -152,7 +157,7 @@ export default function Dashboard() {
               <Clock className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-xl font-bold mb-2">No Active or Upcoming Matches</h3>
-            <p className="text-muted-foreground max-w-sm mx-auto">Click "Refresh Live Scores" to pull the absolute latest fixtures from the global servers.</p>
+            <p className="text-muted-foreground max-w-sm mx-auto">Click "Refresh Live Scores" to pull the absolute latest international fixtures from the global servers.</p>
           </div>
         )}
       </main>
