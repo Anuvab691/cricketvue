@@ -1,14 +1,13 @@
-
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchCard } from '@/components/dashboard/MatchCard';
-import { Trophy, Loader2, Radio, Zap, CalendarDays, Clock } from 'lucide-react';
+import { Loader2, Radio, Zap, CalendarDays, Clock, LayoutGrid } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
-import { isToday, isTomorrow, parseISO, compareAsc, format } from 'date-fns';
+import { isToday, isTomorrow, parseISO, compareAsc, format, isAfter, startOfToday } from 'date-fns';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -37,7 +36,15 @@ export default function Dashboard() {
     );
   }
 
-  const sortedMatches = [...(matches || [])].sort((a, b) => {
+  // Filter out any matches that are finished or from the past (before today)
+  const todayStart = startOfToday();
+  const currentAndFutureMatches = (matches || []).filter(m => {
+    const matchTime = parseISO(m.startTime);
+    // Include matches that are 'live' regardless of time, or matches that haven't happened yet (Today or later)
+    return m.status === 'live' || isAfter(matchTime, todayStart) || isToday(matchTime);
+  }).filter(m => m.status !== 'finished'); // Explicitly exclude finished games from the main feed
+
+  const sortedMatches = [...currentAndFutureMatches].sort((a, b) => {
     return compareAsc(parseISO(a.startTime), parseISO(b.startTime));
   });
 
@@ -45,7 +52,6 @@ export default function Dashboard() {
   const todayMatches = sortedMatches.filter(m => m.status === 'upcoming' && isToday(parseISO(m.startTime)));
   const tomorrowMatches = sortedMatches.filter(m => m.status === 'upcoming' && isTomorrow(parseISO(m.startTime)));
   const futureMatches = sortedMatches.filter(m => m.status === 'upcoming' && !isToday(parseISO(m.startTime)) && !isTomorrow(parseISO(m.startTime)));
-  const finishedMatches = sortedMatches.filter(m => m.status === 'finished').reverse();
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -55,16 +61,17 @@ export default function Dashboard() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
           <div>
             <h1 className="text-3xl font-bold font-headline mb-2 flex items-center gap-2">
-              Match Center
+              <LayoutGrid className="w-8 h-8 text-primary" />
+              Live & Upcoming
             </h1>
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent rounded-full border border-accent/20">
-                <Zap className="w-3 h-3" /> Real-Time API
+                <Zap className="w-3 h-3" /> Real-Time Sync
               </span>
               {settings?.lastGlobalSync && (
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" /> 
-                  Last Refreshed: {format(new Date(settings.lastGlobalSync), 'HH:mm:ss')}
+                  Updated: {format(new Date(settings.lastGlobalSync), 'HH:mm')}
                 </span>
               )}
             </div>
@@ -77,7 +84,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-3 mb-6">
               <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
-                <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Live Now</span>
+                <span className="text-xs font-bold text-red-500 uppercase tracking-widest">In Play</span>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -90,9 +97,9 @@ export default function Dashboard() {
 
         {todayMatches.length > 0 && (
           <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-6 border-b border-border/50 pb-4">
               <CalendarDays className="w-5 h-5 text-accent" />
-              <h2 className="text-xl font-bold uppercase tracking-widest">Today's Fixtures</h2>
+              <h2 className="text-xl font-bold uppercase tracking-tighter">Scheduled Today</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {todayMatches.map(match => (
@@ -104,9 +111,9 @@ export default function Dashboard() {
 
         {tomorrowMatches.length > 0 && (
           <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-6 border-b border-border/50 pb-4">
               <Radio className="w-5 h-5 text-muted-foreground" />
-              <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">Tomorrow's Action</h2>
+              <h2 className="text-xl font-bold uppercase tracking-tighter text-muted-foreground">Tomorrow's Fixtures</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {tomorrowMatches.map(match => (
@@ -118,9 +125,9 @@ export default function Dashboard() {
 
         {futureMatches.length > 0 && (
           <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-6 border-b border-border/50 pb-4">
               <Radio className="w-5 h-5 text-muted-foreground opacity-50" />
-              <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground opacity-50">Future Matches</h2>
+              <h2 className="text-xl font-bold uppercase tracking-tighter text-muted-foreground opacity-50">Future Leagues</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {futureMatches.map(match => (
@@ -130,23 +137,13 @@ export default function Dashboard() {
           </section>
         )}
 
-        {finishedMatches.length > 0 && (
-          <section>
-            <div className="flex items-center gap-3 mb-6">
-              <Trophy className="w-5 h-5 text-green-500" />
-              <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">Recent Results</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-90">
-              {finishedMatches.map(match => (
-                <MatchCard key={match.id} match={match} />
-              ))}
-            </div>
-          </section>
-        )}
-
         {sortedMatches.length === 0 && (
-          <div className="glass-card p-12 text-center rounded-3xl">
-            <p className="text-muted-foreground italic">No matches synced yet. Click "Refresh Live Scores" to pull current data from the API.</p>
+          <div className="glass-card p-20 text-center rounded-3xl border-dashed border-white/5">
+            <div className="w-16 h-16 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Clock className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">No Live or Upcoming Matches</h3>
+            <p className="text-muted-foreground max-w-sm mx-auto">Click "Refresh Live Scores" to pull the latest fixtures from the global cricket calendar.</p>
           </div>
         )}
       </main>
