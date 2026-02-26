@@ -69,6 +69,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 /**
  * Generates mock matches relative to current time to ensure the app always looks "alive" and current.
  * These are only shown if the real API key has issues or returns empty data.
+ * Updated to remove IPL and focus on International Fixtures.
  */
 function getMockMatches(): ExternalMatch[] {
   const now = new Date();
@@ -90,50 +91,50 @@ function getMockMatches(): ExternalMatch[] {
   return [
     {
       id: "mock-live-1",
-      name: "Mumbai Indians vs Chennai Super Kings",
+      name: "India vs Australia",
       matchType: "t20",
-      status: "CSK: 156/4 (16.2 ov)",
-      venue: "Wankhede Stadium, Mumbai",
+      status: "AUS: 142/3 (15.4 ov)",
+      venue: "Narendra Modi Stadium, Ahmedabad",
       date: todayLive.toISOString(),
-      series: "IPL 2025",
-      teams: ["Mumbai Indians", "CSK"],
-      score: [{ r: 156, w: 4, o: 16.2, inning: "CSK" }],
+      series: "T20 International Series",
+      teams: ["India", "Australia"],
+      score: [{ r: 142, w: 3, o: 15.4, inning: "AUS" }],
       matchStarted: true,
       matchEnded: false
     },
     {
       id: "mock-today-1",
-      name: "India vs Pakistan",
+      name: "South Africa vs Pakistan",
       matchType: "t20",
       status: "Upcoming",
-      venue: "Narendra Modi Stadium, Ahmedabad",
+      venue: "Wanderers Stadium, Johannesburg",
       date: todayUpcoming.toISOString(),
       series: "Champions Trophy 2025",
-      teams: ["India", "Pakistan"],
+      teams: ["South Africa", "Pakistan"],
       matchStarted: false,
       matchEnded: false
     },
     {
       id: "mock-tomorrow-1",
-      name: "RCB vs Kolkata Knight Riders",
+      name: "England vs New Zealand",
       matchType: "t20",
       status: "Upcoming",
-      venue: "M. Chinnaswamy Stadium, Bengaluru",
+      venue: "Lord's, London",
       date: tomorrowMatch.toISOString(),
-      series: "IPL 2025",
-      teams: ["RCB", "KKR"],
+      series: "International Bilateral Series",
+      teams: ["England", "New Zealand"],
       matchStarted: false,
       matchEnded: false
     },
     {
       id: "mock-future-1",
-      name: "England vs Australia",
+      name: "West Indies vs Sri Lanka",
       matchType: "t20",
       status: "Upcoming",
-      venue: "Lord's, London",
+      venue: "Kensington Oval, Barbados",
       date: futureMatch.toISOString(),
-      series: "The Ashes T20 Series",
-      teams: ["England", "Australia"],
+      series: "T20 World Cup Warm-ups",
+      teams: ["West Indies", "Sri Lanka"],
       matchStarted: false,
       matchEnded: false
     }
