@@ -68,7 +68,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 }
 
 /**
- * Generates mock matches relative to current time to ensure the app always looks "alive".
+ * Generates mock matches relative to current time to ensure the app always looks "alive" and current.
  */
 function getMockMatches(): ExternalMatch[] {
   const now = new Date();
