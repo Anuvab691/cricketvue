@@ -52,7 +52,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       status: m.status || 'Scheduled',
       venue: m.venue || 'International Stadium',
       date: m.dateTimeGMT || m.date || new Date().toISOString(),
-      series: m.series || 'International Series', // Some matches might not have series field depending on API version
+      series: m.series || 'International Series',
       teams: m.teams || ['Unknown', 'Unknown'],
       score: m.score || []
     }));
@@ -63,55 +63,57 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 }
 
 function getMockMatches(): ExternalMatch[] {
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 86400000);
+  const nextWeek = new Date(now.getTime() + 86400000 * 7);
+
   return [
     {
-      id: "real-match-101",
-      name: "India vs England - 5th Test",
-      matchType: "test",
-      status: "Stumps - Day 3",
-      venue: "HPCA Stadium, Dharamshala",
-      date: new Date().toISOString(),
-      series: "England tour of India",
-      teams: ["India", "England"],
-      score: [
-        { r: 477, w: 10, o: 120.1, inning: "India Inn 1" },
-        { r: 218, w: 10, o: 57.4, inning: "England Inn 1" },
-        { r: 103, w: 5, o: 28.0, inning: "England Inn 2" }
-      ]
-    },
-    {
-      id: "real-match-102",
-      name: "RCB vs Gujarat Titans",
-      matchType: "t20",
-      status: "Gujarat Titans need 45 runs in 18 balls",
-      venue: "M. Chinnaswamy Stadium, Bengaluru",
-      series: "Indian Premier League (IPL) 2024",
-      date: new Date().toISOString(),
-      teams: ["RCB", "Gujarat Titans"],
-      score: [
-        { r: 198, w: 5, o: 20, inning: "RCB" },
-        { r: 154, w: 3, o: 17, inning: "GT" }
-      ]
-    },
-    {
-      id: "real-match-upcoming-1",
-      name: "Lahore Qalandars vs Islamabad United",
-      matchType: "t20",
-      status: "Upcoming",
+      id: "live-match-2025-1",
+      name: "India vs Pakistan - Champions Trophy",
+      matchType: "odi",
+      status: "India needs 12 runs in 8 balls",
       venue: "Gaddafi Stadium, Lahore",
-      series: "Pakistan Super League (PSL) 2024",
-      date: new Date(Date.now() + 86400000).toISOString(),
-      teams: ["Lahore Qalandars", "Islamabad United"]
+      date: now.toISOString(),
+      series: "ICC Champions Trophy 2025",
+      teams: ["India", "Pakistan"],
+      score: [
+        { r: 285, w: 4, o: 48.4, inning: "India" },
+        { r: 296, w: 9, o: 50, inning: "Pakistan" }
+      ]
     },
     {
-      id: "real-match-upcoming-2",
-      name: "Sydney Sixers vs Brisbane Heat",
+      id: "live-match-2025-2",
+      name: "CSK vs Mumbai Indians",
+      matchType: "t20",
+      status: "CSK: 145/3 (14.2 ov)",
+      venue: "M. A. Chidambaram Stadium, Chennai",
+      date: now.toISOString(),
+      series: "IPL 2025",
+      teams: ["CSK", "Mumbai Indians"],
+      score: [
+        { r: 145, w: 3, o: 14.2, inning: "CSK" }
+      ]
+    },
+    {
+      id: "upcoming-match-2025-1",
+      name: "Australia vs England - Ashes",
+      matchType: "test",
+      status: "Upcoming",
+      venue: "The Gabba, Brisbane",
+      date: tomorrow.toISOString(),
+      series: "The Ashes 2025",
+      teams: ["Australia", "England"]
+    },
+    {
+      id: "upcoming-match-2025-2",
+      name: "UP Warriorz vs Delhi Capitals",
       matchType: "t20",
       status: "Upcoming",
-      venue: "Sydney Cricket Ground",
-      series: "Big Bash League (BBL) 13",
-      date: new Date(Date.now() + 172800000).toISOString(),
-      teams: ["Sydney Sixers", "Brisbane Heat"]
+      venue: "Arun Jaitley Stadium, Delhi",
+      date: nextWeek.toISOString(),
+      series: "WPL 2025",
+      teams: ["UP Warriorz", "Delhi Capitals"]
     }
   ];
 }

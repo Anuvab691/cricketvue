@@ -16,17 +16,26 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const batchPromises = liveMatches.map(async (m) => {
       const matchRef = doc(db, 'matches', m.id);
       
-      const scoreString = m.score 
+      const scoreString = (m.score && m.score.length > 0)
         ? m.score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(' | ')
         : 'TBD';
+
+      const lowerStatus = m.status.toLowerCase();
+      
+      // Improved logic for status categorization
+      let status: 'live' | 'upcoming' | 'finished' = 'upcoming';
+      if (lowerStatus.includes('live') || lowerStatus.includes('progress') || lowerStatus.includes('need') || (m.score && m.score.length > 0 && !lowerStatus.includes('won') && !lowerStatus.includes('lost'))) {
+        status = 'live';
+      } else if (lowerStatus.includes('won') || lowerStatus.includes('lost') || lowerStatus.includes('result') || lowerStatus.includes('final') || lowerStatus.includes('finished')) {
+        status = 'finished';
+      }
 
       const matchData = {
         teamA: m.teams[0],
         teamB: m.teams[1],
         startTime: m.date,
         series: m.series || 'International Series',
-        status: (m.status.toLowerCase().includes('progress') || m.status.toLowerCase().includes('need')) ? 'live' : 
-                (m.status.toLowerCase().includes('upcoming') || m.status.toLowerCase().includes('scheduled') || m.status.toLowerCase() === 'upcoming') ? 'upcoming' : 'finished',
+        status: status,
         statusText: m.status,
         currentScore: scoreString,
         venue: m.venue
@@ -73,7 +82,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
           errorEmitter.emit('permission-error', permissionError);
         });
 
-        if (matchData.status === 'live') {
+        if (status === 'live') {
           const microMarketRef = doc(marketsRef, 'next_ball');
           const microData = {
             type: 'next_ball',
