@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Service for interacting with external Cricket Data APIs.
- * This handles fetching live scores and match schedules using the provided API key.
+ * This handles fetching real-time live scores and match schedules using the provided API key.
  */
 
 export interface ExternalMatch {
@@ -28,12 +28,12 @@ export interface ExternalMatch {
 const CRICKET_API_KEY = "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
 
 /**
- * Fetches current matches from cricketdata.org.
+ * Fetches current real-world matches from cricketdata.org.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     const response = await fetch(`https://api.cricketdata.org/v1/currentMatches?apikey=${CRICKET_API_KEY}`, {
-      next: { revalidate: 30 } // Cache for 30 seconds
+      next: { revalidate: 15 } // Very low cache for "Actual Web" feel
     });
     
     if (!response.ok) {
@@ -44,11 +44,10 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     
     if (json.status !== 'success') {
       console.warn("Cricket Data API returned non-success status:", json.reason);
-      return getMockMatches();
+      return [];
     }
 
     // Filter and map the API response to our internal ExternalMatch format
-    // Also explicitly filtering out any matches containing "IPL" just in case the API returns them
     return json.data
       .filter((m: any) => !m.series?.toLowerCase().includes('ipl') && !m.name?.toLowerCase().includes('ipl'))
       .map((m: any) => ({
@@ -66,80 +65,6 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       }));
   } catch (error) {
     console.error("Cricket Data Sync Error:", error);
-    return getMockMatches();
+    return [];
   }
-}
-
-/**
- * Generates mock matches relative to current time to ensure the app always looks "alive" and current.
- * Updated to focus purely on International matches as requested.
- */
-function getMockMatches(): ExternalMatch[] {
-  const now = new Date();
-  
-  const todayLive = new Date(now);
-  todayLive.setMinutes(now.getMinutes() - 45); 
-
-  const todayUpcoming = new Date(now);
-  todayUpcoming.setHours(now.getHours() + 2);
-
-  const tomorrowMatch = new Date(now);
-  tomorrowMatch.setDate(now.getDate() + 1);
-  tomorrowMatch.setHours(14, 0, 0, 0);
-
-  const futureMatch = new Date(now);
-  futureMatch.setDate(now.getDate() + 4);
-  futureMatch.setHours(19, 0, 0, 0);
-
-  return [
-    {
-      id: "mock-live-1",
-      name: "India vs Australia",
-      matchType: "t20",
-      status: "AUS: 142/3 (15.4 ov)",
-      venue: "Narendra Modi Stadium, Ahmedabad",
-      date: todayLive.toISOString(),
-      series: "T20 International Series",
-      teams: ["India", "Australia"],
-      score: [{ r: 142, w: 3, o: 15.4, inning: "AUS" }],
-      matchStarted: true,
-      matchEnded: false
-    },
-    {
-      id: "mock-today-1",
-      name: "South Africa vs Pakistan",
-      matchType: "t20",
-      status: "Upcoming",
-      venue: "Wanderers Stadium, Johannesburg",
-      date: todayUpcoming.toISOString(),
-      series: "ICC Champions Trophy 2025",
-      teams: ["South Africa", "Pakistan"],
-      matchStarted: false,
-      matchEnded: false
-    },
-    {
-      id: "mock-tomorrow-1",
-      name: "England vs New Zealand",
-      matchType: "t20",
-      status: "Upcoming",
-      venue: "Lord's, London",
-      date: tomorrowMatch.toISOString(),
-      series: "International Bilateral Series",
-      teams: ["England", "New Zealand"],
-      matchStarted: false,
-      matchEnded: false
-    },
-    {
-      id: "mock-future-1",
-      name: "West Indies vs Sri Lanka",
-      matchType: "t20",
-      status: "Upcoming",
-      venue: "Kensington Oval, Barbados",
-      date: futureMatch.toISOString(),
-      series: "T20 World Cup Warm-ups",
-      teams: ["West Indies", "Sri Lanka"],
-      matchStarted: false,
-      matchEnded: false
-    }
-  ];
 }

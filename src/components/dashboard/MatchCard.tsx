@@ -3,15 +3,15 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Clock, MapPin, Calendar, CheckCircle2, Trophy } from 'lucide-react';
+import { Clock, MapPin, Calendar, CheckCircle2, Trophy, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 export function MatchCard({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const isFinished = match.status === 'finished';
   
-  const matchDate = match.startTime ? new Date(match.startTime) : null;
+  const matchDate = match.startTime ? parseISO(match.startTime) : null;
   const formattedDate = matchDate ? format(matchDate, 'MMM dd, yyyy') : 'TBD';
   const formattedTime = matchDate ? format(matchDate, 'HH:mm') : 'TBD';
 
@@ -25,6 +25,12 @@ export function MatchCard({ match }: { match: any }) {
               {match.series || 'International Series'}
             </span>
           </div>
+          {isLive && (
+            <span className="text-[9px] font-bold text-primary animate-pulse flex items-center gap-1">
+              <span className="w-1 h-1 bg-primary rounded-full" />
+              WEB LIVE
+            </span>
+          )}
         </div>
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
@@ -70,7 +76,7 @@ export function MatchCard({ match }: { match: any }) {
               <p className="text-[11px] font-mono text-accent font-bold leading-relaxed mb-1">
                 {match.currentScore && match.currentScore !== 'TBD' ? match.currentScore : match.statusText}
               </p>
-              {isFinished && match.statusText && match.currentScore !== 'TBD' && (
+              {match.statusText && (
                 <p className="text-[10px] text-muted-foreground italic mt-1 border-t border-white/5 pt-1">
                   {match.statusText}
                 </p>
@@ -79,8 +85,9 @@ export function MatchCard({ match }: { match: any }) {
           )}
 
           <Link href={`/match/${match.id}`}>
-            <Button className="w-full bg-primary hover:bg-primary/90 rounded-xl py-5 font-bold text-sm group-hover:scale-[1.01] transition-transform">
-              {isFinished ? 'View Final Result' : 'View Markets'}
+            <Button className="w-full bg-primary hover:bg-primary/90 rounded-xl py-5 font-bold text-sm group-hover:scale-[1.01] transition-transform gap-2">
+              {isFinished ? 'View Final Result' : 'View Live Markets'}
+              <ArrowUpRight className="w-4 h-4" />
             </Button>
           </Link>
         </div>
