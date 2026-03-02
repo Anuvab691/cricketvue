@@ -4,19 +4,20 @@ import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchCard } from '@/components/dashboard/MatchCard';
-import { Loader2, Zap, CalendarDays, Clock, LayoutGrid, Radio } from 'lucide-react';
+import { Loader2, Zap, CalendarDays, Clock, LayoutGrid, Radio, ShieldCheck } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { isToday, isTomorrow, parseISO, compareAsc, format, isAfter, startOfToday } from 'date-fns';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 
 export default function Dashboard() {
   const firestore = useFirestore();
   const { user } = useUser();
+  const [syncing, setSyncing] = useState(false);
   
   const effectiveUserId = user?.uid || 'guest-user-123';
 
-  // Fetch current user data to check for admin status
+  // Fetch current user profile to verify role
   const userRef = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
@@ -36,17 +37,21 @@ export default function Dashboard() {
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
   const { data: settings } = useDoc(settingsRef);
 
-  // Automatic Background Synchronization
-  // Only the Admin or an authorized user should trigger the writes to avoid race conditions
+  /**
+   * Automatic Background Synchronization Heartbeat
+   * Only the Apex Admin triggers writes to Firestore to maintain single source of truth.
+   */
   useEffect(() => {
     if (!firestore || !userData || userData.role !== 'admin') return;
 
-    const intervalId = setInterval(() => {
-      syncCricketMatchesAction(firestore);
-    }, 15000); // Sync every 15 seconds for a lively demo feel
+    const performSync = async () => {
+      setSyncing(true);
+      await syncCricketMatchesAction(firestore);
+      setSyncing(false);
+    };
 
-    // Initial sync
-    syncCricketMatchesAction(firestore);
+    const intervalId = setInterval(performSync, 15000); // 15s refresh for "Actual Web" feel
+    performSync(); // Initial sync on mount
 
     return () => clearInterval(intervalId);
   }, [firestore, userData]);
@@ -61,10 +66,13 @@ export default function Dashboard() {
 
   const todayStart = startOfToday();
   
+  // Strict Filtering: Only current/future matches. Remove past finished matches.
   const currentAndFutureMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
-    if (m.status === 'finished') return false;
+    // Hide finished matches that are older than today
+    if (m.status === 'finished' && !isToday(matchTime)) return false;
+    // Show live, upcoming, or today's finished matches
     return isToday(matchTime) || isAfter(matchTime, todayStart);
   });
 
@@ -73,9 +81,10 @@ export default function Dashboard() {
   });
 
   const liveMatches = sortedMatches.filter(m => m.status === 'live');
-  const todayMatches = sortedMatches.filter(m => m.status === 'upcoming' && isToday(parseISO(m.startTime)));
-  const tomorrowMatches = sortedMatches.filter(m => m.status === 'upcoming' && isTomorrow(parseISO(m.startTime)));
-  const futureMatches = sortedMatches.filter(m => m.status === 'upcoming' && !isToday(parseISO(m.startTime)) && !isTomorrow(parseISO(m.startTime)));
+  const upcomingMatches = sortedMatches.filter(m => m.status === 'upcoming');
+  const todayMatches = upcomingMatches.filter(m => isToday(parseISO(m.startTime)));
+  const tomorrowMatches = upcomingMatches.filter(m => isTomorrow(parseISO(m.startTime)));
+  const futureMatches = upcomingMatches.filter(m => !isToday(parseISO(m.startTime)) && !isTomorrow(parseISO(m.startTime)));
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -89,18 +98,20 @@ export default function Dashboard() {
               Live Match Center
             </h1>
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent rounded-full border border-accent/20">
-                <Zap className="w-3 h-3" /> Auto-Updating (Demo Mode)
-              </span>
+              {userData?.role === 'admin' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20">
+                  <ShieldCheck className="w-3 h-3" />
+                  {syncing ? 'Syncing Actual Web...' : 'Live Heartbeat Active'}
+                </span>
+              )}
               {settings?.lastGlobalSync && (
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" /> 
-                  Last Sync: {format(new Date(settings.lastGlobalSync), 'HH:mm:ss')}
+                  Server Time: {format(new Date(settings.lastGlobalSync), 'HH:mm:ss')}
                 </span>
               )}
             </div>
           </div>
-          {/* Refresh button removed for automatic updates */}
         </header>
 
         {liveMatches.length > 0 && (

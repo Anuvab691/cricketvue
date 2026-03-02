@@ -1,13 +1,13 @@
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, getDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
 import { fetchLiveMatches } from '@/services/cricket-api-service';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 /**
  * Syncs actual real-world cricket data into our Firestore matches collection.
- * Removed demo randomization to ensure data matches the "Actual Web".
+ * This function is designed to be called periodically by the Admin heartbeat.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -17,6 +17,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: true, count: 0 };
     }
 
+    // Process all matches from the API
     const batchPromises = liveMatchesFromApi.map(async (m) => {
       const matchRef = doc(db, 'matches', m.id);
       
@@ -27,7 +28,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         status = 'live';
       }
 
-      // Use actual score from API without randomization
+      // Map API score array to a readable string format
       const scoreString = (m.score && m.score.length > 0)
         ? m.score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(' | ')
         : (status === 'live' ? 'Live - Calculating...' : 'Scheduled');
@@ -44,6 +45,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         lastUpdated: new Date().toISOString()
       };
 
+      // Atomic write to Firestore
       setDoc(matchRef, matchData, { merge: true })
         .catch(async () => {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -53,11 +55,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
           }));
         });
         
-      // Initialize or update markets with static/fair odds
+      // Initialize betting markets if they don't exist
       const marketsRef = collection(db, 'matches', m.id, 'markets');
       const marketsSnap = await getDocs(marketsRef).catch(() => null);
       
       if (marketsSnap && marketsSnap.empty) {
+        // Match Winner Market (Standard)
         const winnerMarketRef = doc(marketsRef, 'match_winner');
         const winnerData = {
           type: 'match_winner',
@@ -69,6 +72,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         };
         setDoc(winnerMarketRef, winnerData);
 
+        // Live Micro Markets (only for Live matches)
         if (status === 'live') {
           const nextBallRef = doc(marketsRef, 'next_ball');
           const nextBallData = {
@@ -87,11 +91,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     await Promise.all(batchPromises);
 
+    // Update the global sync timestamp for UI reference
     const settingsRef = doc(db, 'app_settings', 'global');
     setDoc(settingsRef, { lastGlobalSync: new Date().toISOString() }, { merge: true });
 
     return { success: true, count: liveMatchesFromApi.length };
   } catch (error: any) {
+    console.error("Sync Action Failed:", error);
     return { error: error.message };
   }
 }
