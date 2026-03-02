@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -11,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { UserPlus, Send, Loader2, ShieldCheck, TrendingUp } from 'lucide-react';
-import { createSubAccountAction, transferTokensAction } from '@/app/actions/user-management';
+import { UserPlus, Send, Loader2, ShieldCheck, TrendingUp, MinusCircle } from 'lucide-react';
+import { createSubAccountAction, transferTokensAction, deductTokensAction } from '@/app/actions/user-management';
 import { toast } from '@/hooks/use-toast';
 
 interface ManagementPanelProps {
@@ -29,9 +28,9 @@ export function ManagementPanel({ currentUserId, role, targetRole }: ManagementP
   const [newEmail, setNewEmail] = useState('');
   const [newUsername, setNewUsername] = useState('');
 
-  // Transfer State
-  const [transferAmount, setTransferAmount] = useState('1000');
-  const [transferId, setTransferId] = useState<string | null>(null);
+  // Operation State
+  const [amount, setAmount] = useState('1000');
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const usersQuery = useMemoFirebase(() => {
     if (!firestore || !currentUserId) return null;
@@ -63,14 +62,27 @@ export function ManagementPanel({ currentUserId, role, targetRole }: ManagementP
 
   const handleTransfer = async (toUserId: string) => {
     if (!firestore) return;
-    setTransferId(toUserId);
-    const amount = parseFloat(transferAmount);
-    const result = await transferTokensAction(firestore, currentUserId, toUserId, amount, role === 'admin');
-    setTransferId(null);
+    setProcessingId(toUserId + '-send');
+    const amountVal = parseFloat(amount);
+    const result = await transferTokensAction(firestore, currentUserId, toUserId, amountVal, role === 'admin');
+    setProcessingId(null);
     if (result.success) {
-      toast({ title: 'Tokens Sent', description: `Successfully transferred ${amount} tokens.` });
+      toast({ title: 'Tokens Sent', description: `Successfully transferred ${amountVal} tokens.` });
     } else {
       toast({ title: 'Transfer Failed', description: result.error, variant: 'destructive' });
+    }
+  };
+
+  const handleDeduct = async (fromUserId: string) => {
+    if (!firestore) return;
+    setProcessingId(fromUserId + '-deduct');
+    const amountVal = parseFloat(amount);
+    const result = await deductTokensAction(firestore, currentUserId, fromUserId, amountVal, role === 'admin');
+    setProcessingId(null);
+    if (result.success) {
+      toast({ title: 'Tokens Deducted', description: `Successfully reclaimed ${amountVal} tokens.` });
+    } else {
+      toast({ title: 'Deduction Failed', description: result.error, variant: 'destructive' });
     }
   };
 
@@ -108,16 +120,16 @@ export function ManagementPanel({ currentUserId, role, targetRole }: ManagementP
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-accent" />
-                Token Distribution
+                Token Control
               </CardTitle>
-              <CardDescription>Manage balances for your active {targetRole}s.</CardDescription>
+              <CardDescription>Adjust balances for your active {targetRole}s.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Label className="text-xs">Amount:</Label>
               <Input 
                 type="number" 
-                value={transferAmount} 
-                onChange={(e) => setTransferAmount(e.target.value)} 
+                value={amount} 
+                onChange={(e) => setAmount(e.target.value)} 
                 className="w-24 h-8 text-xs font-bold"
               />
             </div>
@@ -146,16 +158,28 @@ export function ManagementPanel({ currentUserId, role, targetRole }: ManagementP
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="h-8 gap-1 hover:text-accent hover:bg-accent/10"
-                        onClick={() => handleTransfer(user.id)}
-                        disabled={transferId === user.id}
-                      >
-                        {transferId === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                        Send
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-8 gap-1 hover:text-red-500 hover:bg-red-50"
+                          onClick={() => handleDeduct(user.id)}
+                          disabled={!!processingId}
+                        >
+                          {processingId === user.id + '-deduct' ? <Loader2 className="w-3 h-3 animate-spin" /> : <MinusCircle className="w-3 h-3" />}
+                          Deduct
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-8 gap-1 hover:text-accent hover:bg-accent/10"
+                          onClick={() => handleTransfer(user.id)}
+                          disabled={!!processingId}
+                        >
+                          {processingId === user.id + '-send' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                          Send
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

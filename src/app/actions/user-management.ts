@@ -1,4 +1,3 @@
-
 'use client';
 
 import { doc, setDoc, updateDoc, runTransaction, Firestore, collection, query, where, getDocs } from 'firebase/firestore';
@@ -81,6 +80,54 @@ export async function transferTokensAction(
   } catch (e: any) {
     errorEmitter.emit('permission-error', new FirestorePermissionError({
       path: toRef.path,
+      operation: 'update',
+    }));
+    return { error: e.message };
+  }
+}
+
+/**
+ * Deducts tokens from a child and returns them to the parent.
+ */
+export async function deductTokensAction(
+  db: Firestore,
+  parentId: string,
+  childId: string,
+  amount: number,
+  isApex: boolean = false
+) {
+  const parentRef = doc(db, 'users', parentId);
+  const childRef = doc(db, 'users', childId);
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const parentDoc = await transaction.get(parentRef);
+      const childDoc = await transaction.get(childRef);
+
+      if (!childDoc.exists()) throw new Error("Target sub-account not found.");
+      
+      const childBalance = childDoc.data().tokenBalance || 0;
+      if (childBalance < amount) throw new Error("Sub-account has insufficient balance to deduct this amount.");
+
+      // 1. Deduct from child
+      transaction.update(childRef, {
+        tokenBalance: childBalance - amount
+      });
+
+      // 2. Add back to parent (unless Apex Admin who has infinite pool)
+      if (!isApex) {
+        if (!parentDoc.exists()) throw new Error("Parent profile not found.");
+        const parentBalance = parentDoc.data().tokenBalance || 0;
+        transaction.update(parentRef, {
+          tokenBalance: parentBalance + amount
+        });
+      }
+    });
+
+    return { success: true };
+  } catch (e: any) {
+    errorEmitter.emit('permission-error', new FirestorePermissionError({
+      path: childRef.path,
       operation: 'update',
     }));
     return { error: e.message };
