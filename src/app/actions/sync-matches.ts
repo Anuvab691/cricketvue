@@ -7,7 +7,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 
 /**
  * Syncs actual real-world cricket data into our Firestore matches collection.
- * This function is designed to be called periodically by the Admin heartbeat.
+ * This function processes raw API data into our internal Betting Match format.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -17,10 +17,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: true, count: 0 };
     }
 
-    // Process all matches from the API
     const batchPromises = liveMatchesFromApi.map(async (m) => {
       const matchRef = doc(db, 'matches', m.id);
       
+      // Determine logical status for our UI
       let status: 'live' | 'upcoming' | 'finished' = 'upcoming';
       if (m.matchEnded) {
         status = 'finished';
@@ -28,14 +28,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
         status = 'live';
       }
 
-      // Map API score array to a readable string format
+      // Format Score Array: "India 240/5 (45.2 ov) | Aus 10/0 (2 ov)"
       const scoreString = (m.score && m.score.length > 0)
         ? m.score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(' | ')
-        : (status === 'live' ? 'Live - Calculating...' : 'Scheduled');
+        : (status === 'live' ? 'Live - Score Updating...' : 'Scheduled');
 
       const matchData = {
-        teamA: m.teams[0],
-        teamB: m.teams[1],
+        teamA: m.teams[0] || 'TBD',
+        teamB: m.teams[1] || 'TBD',
         startTime: m.date,
         series: m.series || 'International Series',
         status: status,
@@ -45,9 +45,9 @@ export async function syncCricketMatchesAction(db: Firestore) {
         lastUpdated: new Date().toISOString()
       };
 
-      // Atomic write to Firestore
+      // Atomic Update to Match Data
       setDoc(matchRef, matchData, { merge: true })
-        .catch(async () => {
+        .catch(() => {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: matchRef.path,
             operation: 'write',
@@ -55,27 +55,27 @@ export async function syncCricketMatchesAction(db: Firestore) {
           }));
         });
         
-      // Initialize betting markets if they don't exist
+      // Ensure Betting Markets exist for this match
       const marketsRef = collection(db, 'matches', m.id, 'markets');
       const marketsSnap = await getDocs(marketsRef).catch(() => null);
       
+      // Initialize Default Markets if they are missing
       if (marketsSnap && marketsSnap.empty) {
-        // Match Winner Market (Standard)
+        // Standard Winner Market
         const winnerMarketRef = doc(marketsRef, 'match_winner');
-        const winnerData = {
+        setDoc(winnerMarketRef, {
           type: 'match_winner',
           status: 'open',
           selections: [
-            { id: 'sel_a', name: m.teams[0], odds: 1.90 },
-            { id: 'sel_b', name: m.teams[1], odds: 1.90 }
+            { id: 'sel_a', name: m.teams[0] || 'Team A', odds: 1.90 },
+            { id: 'sel_b', name: m.teams[1] || 'Team B', odds: 1.90 }
           ]
-        };
-        setDoc(winnerMarketRef, winnerData);
+        });
 
-        // Live Micro Markets (only for Live matches)
+        // Instant Micro Markets (Next Ball) for Live Games
         if (status === 'live') {
           const nextBallRef = doc(marketsRef, 'next_ball');
-          const nextBallData = {
+          setDoc(nextBallRef, {
             type: 'next_ball',
             status: 'open',
             selections: [
@@ -83,21 +83,23 @@ export async function syncCricketMatchesAction(db: Firestore) {
               { id: 'boundary', name: 'Boundary', odds: 4.50 },
               { id: 'wicket', name: 'Wicket', odds: 12.00 }
             ]
-          };
-          setDoc(nextBallRef, nextBallData);
+          });
         }
       }
     });
 
     await Promise.all(batchPromises);
 
-    // Update the global sync timestamp for UI reference
+    // Global Sync Timestamp for UI synchronization
     const settingsRef = doc(db, 'app_settings', 'global');
-    setDoc(settingsRef, { lastGlobalSync: new Date().toISOString() }, { merge: true });
+    setDoc(settingsRef, { 
+      lastGlobalSync: new Date().toISOString(),
+      activeMatchesCount: liveMatchesFromApi.length 
+    }, { merge: true });
 
     return { success: true, count: liveMatchesFromApi.length };
   } catch (error: any) {
-    console.error("Sync Action Failed:", error);
+    console.error("Sync Internal Failure:", error);
     return { error: error.message };
   }
 }

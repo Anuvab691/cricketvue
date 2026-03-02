@@ -24,47 +24,56 @@ export interface ExternalMatch {
   matchEnded: boolean;
 }
 
-// Using the provided API key for Cricket Data
+/**
+ * CONFIGURATION: Update these values if you change your API provider.
+ */
 const CRICKET_API_KEY = "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
+const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
 
 /**
- * Fetches current real-world matches from cricketdata.org.
+ * Fetches current real-world matches from the configured API provider.
+ * Uses a low revalidation time to ensure data is fresh.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
-    const response = await fetch(`https://api.cricketdata.org/v1/currentMatches?apikey=${CRICKET_API_KEY}`, {
-      next: { revalidate: 15 } // Very low cache for "Actual Web" feel
+    const response = await fetch(`${API_BASE_URL}?apikey=${CRICKET_API_KEY}`, {
+      next: { revalidate: 10 } // Refresh every 10 seconds for "Actual Web" speed
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`Cricket API Error: ${response.status} ${response.statusText}`);
     }
 
     const json = await response.json();
     
-    if (json.status !== 'success') {
-      console.warn("Cricket Data API returned non-success status:", json.reason);
+    if (json.status !== 'success' || !json.data) {
+      console.warn("API returned empty or error state:", json.reason);
       return [];
     }
 
-    // Filter and map the API response to our internal ExternalMatch format
+    // Process and normalize the data
     return json.data
-      .filter((m: any) => !m.series?.toLowerCase().includes('ipl') && !m.name?.toLowerCase().includes('ipl'))
+      .filter((m: any) => {
+        // Filter: Remove IPL and specific minor leagues for a professional look
+        const name = (m.name || '').toLowerCase();
+        const series = (m.series || '').toLowerCase();
+        return !name.includes('ipl') && !series.includes('ipl');
+      })
       .map((m: any) => ({
-        id: m.id || Math.random().toString(36).substr(2, 9),
-        name: m.name || `${m.teams?.[0] || 'Team A'} vs ${m.teams?.[1] || 'Team B'}`,
+        id: m.id || `match-${Math.random().toString(36).substr(2, 9)}`,
+        name: m.name || 'International Fixture',
         matchType: m.matchType || 't20',
         status: m.status || 'Scheduled',
-        venue: m.venue || 'International Stadium',
+        venue: m.venue || 'Global Stadium',
         date: m.dateTimeGMT || m.date || new Date().toISOString(),
         series: m.series || 'International Series',
-        teams: m.teams || ['Unknown', 'Unknown'],
+        teams: m.teams || ['Team A', 'Team B'],
         score: m.score || [],
         matchStarted: m.matchStarted || false,
         matchEnded: m.matchEnded || false
       }));
   } catch (error) {
-    console.error("Cricket Data Sync Error:", error);
+    console.error("Critical Sync Error:", error);
     return [];
   }
 }
