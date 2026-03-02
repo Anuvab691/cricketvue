@@ -18,10 +18,16 @@ export function GamesGrid() {
     { name: 'BATTING LEGENDS', id: 'match-banner-1' },
   ];
 
+  const defaultPlaceholder = {
+    imageUrl: 'https://picsum.photos/seed/cricket/600/400',
+    imageHint: 'cricket match'
+  };
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1">
       {games.map((game, i) => {
-        const placeholder = PlaceHolderImages.find(p => p.id === game.id) || PlaceHolderImages[0];
+        const placeholder = PlaceHolderImages.find(p => p.id === game.id) || PlaceHolderImages[0] || defaultPlaceholder;
+        
         return (
           <div key={i} className="relative aspect-video group overflow-hidden cursor-pointer border border-slate-200">
             <Image 
