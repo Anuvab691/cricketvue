@@ -6,17 +6,17 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchRow } from '@/components/dashboard/MatchRow';
 import { GamesGrid } from '@/components/dashboard/GamesGrid';
 import { 
-  Loader2, Search, Bell, Menu, UserCircle, 
-  Wallet, Trophy, Zap, Clock, Info, 
-  ChevronRight, ArrowRightLeft, ShieldCheck 
+  Loader2, Search, UserCircle, 
+  Zap, ShieldCheck 
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { format, parseISO, compareAsc, isToday, isAfter, startOfToday } from 'date-fns';
+import { parseISO, isToday, isAfter, startOfToday } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 import { logout } from '@/firebase/auth/auth-service';
 import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -47,7 +47,7 @@ export default function Dashboard() {
       await syncCricketMatchesAction(firestore);
       setSyncing(false);
     };
-    const intervalId = setInterval(performSync, 30000);
+    const intervalId = setInterval(performSync, 15000);
     performSync();
     return () => clearInterval(intervalId);
   }, [firestore, userData]);
