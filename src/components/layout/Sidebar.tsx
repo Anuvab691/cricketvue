@@ -1,8 +1,9 @@
+
 'use client';
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, History, Wallet, Menu, X, Rocket, LogOut, User as UserIcon, LogIn } from 'lucide-react';
+import { LayoutDashboard, History, Wallet, Menu, X, Rocket, LogOut, User as UserIcon, LogIn, ShieldAlert, ShieldCheck, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -32,7 +33,16 @@ export function Sidebar({ userId }: { userId: string }) {
     { name: 'My Bets', href: '/my-bets', icon: History },
   ];
 
-  const tokenBalance = userData?.tokenBalance || 1000; // Default balance for guests
+  // Add management panels based on role
+  if (userData?.role === 'admin') {
+    navItems.push({ name: 'Admin Panel', href: '/admin', icon: ShieldAlert });
+  } else if (userData?.role === 'super') {
+    navItems.push({ name: 'Super Panel', href: '/super', icon: ShieldCheck });
+  } else if (userData?.role === 'master') {
+    navItems.push({ name: 'Master Hub', href: '/master', icon: Users });
+  }
+
+  const tokenBalance = userData?.tokenBalance || 0;
 
   const handleLogout = async () => {
     if (auth && user) {
@@ -69,22 +79,36 @@ export function Sidebar({ userId }: { userId: string }) {
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold truncate text-white">{user?.displayName || (user ? 'Authenticated User' : 'Guest Fan')}</p>
+              <p className="text-sm font-bold truncate text-white">{userData?.username || 'Fan'}</p>
               <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">
-                {user ? 'Verified Member' : 'Guest Mode'}
+                {userData?.role || 'Guest'}
               </p>
             </div>
           </div>
 
-          <div className="mb-8 p-4 bg-secondary/50 rounded-2xl border border-border">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider mb-1">
-              <Wallet className="w-3 h-3" />
-              <span>Virtual Balance</span>
+          {userData?.role !== 'admin' && (
+            <div className="mb-8 p-4 bg-secondary/50 rounded-2xl border border-border">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                <Wallet className="w-3 h-3" />
+                <span>Tokens</span>
+              </div>
+              <div className="text-2xl font-bold text-accent">
+                {tokenBalance.toLocaleString()}
+              </div>
             </div>
-            <div className="text-2xl font-bold text-accent">
-              {tokenBalance.toLocaleString()} <span className="text-sm font-medium">Tokens</span>
+          )}
+
+          {userData?.role === 'admin' && (
+            <div className="mb-8 p-4 bg-primary/10 rounded-2xl border border-primary/20">
+              <div className="flex items-center gap-2 text-primary text-xs uppercase tracking-wider mb-1">
+                <ShieldAlert className="w-3 h-3" />
+                <span>Apex Admin</span>
+              </div>
+              <div className="text-lg font-black italic text-white">
+                UNLIMITED
+              </div>
             </div>
-          </div>
+          )}
 
           <nav className="flex-1 space-y-2">
             {navItems.map((item) => (
@@ -105,23 +129,15 @@ export function Sidebar({ userId }: { userId: string }) {
             ))}
           </nav>
 
-          <div className="mt-auto pt-6 space-y-4">
+          <div className="mt-auto pt-6">
             <Button 
               variant="ghost" 
               className="w-full justify-start gap-3 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl"
               onClick={handleLogout}
             >
-              {user ? <LogOut className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
-              <span className="font-medium">{user ? 'Sign Out' : 'Sign In'}</span>
+              <LogOut className="w-5 h-5" />
+              <span className="font-medium">Sign Out</span>
             </Button>
-
-            <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">
-              <p className="text-xs text-primary font-bold uppercase tracking-widest mb-1">Status</p>
-              <p className="text-sm text-white flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                Live Network
-              </p>
-            </div>
           </div>
         </div>
       </aside>

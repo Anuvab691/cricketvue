@@ -10,40 +10,23 @@
         "teamB": { "type": "string" },
         "startTime": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["upcoming", "live", "finished"] },
-        "statusText": { "type": "string", "description": "The descriptive status or result of the match (e.g., India won by 6 wickets)." },
-        "currentScore": { "type": "string", "description": "Live score description (e.g., 145/3 (18.2 ov))" },
+        "statusText": { "type": "string", "description": "The descriptive status or result of the match." },
+        "currentScore": { "type": "string" },
         "venue": { "type": "string" },
         "series": { "type": "string" }
       },
       "required": ["teamA", "teamB", "startTime", "status"]
     },
-    "Market": {
-      "title": "Market",
-      "description": "A betting market associated with a match.",
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "enum": ["match_winner", "next_ball"] },
-        "status": { "type": "string", "enum": ["open", "closed"] },
-        "selections": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "name": { "type": "string" },
-              "odds": { "type": "number" }
-            }
-          }
-        }
-      }
-    },
     "UserProfile": {
       "title": "UserProfile",
-      "description": "User profile including virtual token balance.",
+      "description": "User profile including role and token balance.",
       "type": "object",
       "properties": {
         "username": { "type": "string" },
+        "email": { "type": "string" },
         "tokenBalance": { "type": "number" },
+        "role": { "type": "string", "enum": ["admin", "super", "master", "customer"] },
+        "parentId": { "type": "string", "description": "The UID of the user who created this account." },
         "isActive": { "type": "boolean" }
       }
     },
@@ -53,24 +36,10 @@
       "type": "object",
       "properties": {
         "matchId": { "type": "string" },
-        "matchInfo": { "type": "string" },
-        "selectionId": { "type": "string" },
         "selectionName": { "type": "string" },
         "stake": { "type": "number" },
         "odds": { "type": "number" },
-        "potentialWin": { "type": "number" },
-        "status": { "type": "string", "enum": ["open", "won", "lost", "cancelled"] },
-        "betType": { "type": "string", "enum": ["pre_match", "live_micro"] },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "returnedAmount": { "type": "number" }
-      }
-    },
-    "AppSettings": {
-      "title": "AppSettings",
-      "description": "Global application settings and metadata.",
-      "type": "object",
-      "properties": {
-        "lastGlobalSync": { "type": "string", "format": "date-time" }
+        "status": { "type": "string", "enum": ["open", "won", "lost", "cancelled"] }
       }
     }
   },
@@ -82,10 +51,6 @@
       "schema": "#/entities/Match",
       "description": "Collection of all cricket matches."
     },
-    "/matches/{matchId}/markets/{marketId}": {
-      "schema": "#/entities/Market",
-      "description": "Sub-collection for betting markets per match."
-    },
     "/users/{userId}": {
       "schema": "#/entities/UserProfile",
       "description": "User profile data."
@@ -93,10 +58,6 @@
     "/users/{userId}/bets/{betId}": {
       "schema": "#/entities/Bet",
       "description": "User's history of placed bets."
-    },
-    "/app_settings/{settingId}": {
-      "schema": "#/entities/AppSettings",
-      "description": "Global settings like last sync time."
     }
   }
 }
