@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Rocket, Loader2, KeyRound, Mail, ArrowLeft, Info } from 'lucide-react';
+import { Rocket, Loader2, KeyRound, Mail, ArrowLeft, Info, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
@@ -76,7 +76,7 @@ export default function LoginPage() {
             <Rocket className="w-10 h-10 text-primary-foreground" />
           </div>
           <h1 className="text-4xl font-black tracking-tighter font-headline">CricketVue</h1>
-          <p className="text-muted-foreground">Premium Predictions & Live Insights</p>
+          <p className="text-muted-foreground">Apex Hierarchy & Token Management</p>
         </div>
 
         <Card className="glass-card border-white/10 rounded-3xl overflow-hidden shadow-2xl">
@@ -86,19 +86,21 @@ export default function LoginPage() {
             </CardTitle>
             <CardDescription className="text-center">
               {isSignUp 
-                ? 'Join thousands of fans and start tracking your virtual bets.' 
-                : 'Sign in to manage your virtual tokens and live matches.'}
+                ? 'Join the network and start your betting journey.' 
+                : 'Sign in to access your administrative panel.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
-            {!isSignUp && (
-              <div className="mb-6 p-3 bg-primary/10 border border-primary/20 rounded-xl flex items-start gap-3">
-                <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                <p className="text-[11px] text-primary/90 leading-tight font-medium">
-                  Don't have an account yet? Toggle to <button onClick={() => setIsSignUp(true)} className="underline font-bold">Sign Up</button> to create your credentials with any email.
-                </p>
+            <div className="mb-6 p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 text-primary font-bold text-xs">
+                <ShieldAlert className="w-4 h-4" />
+                HIERARCHY ACCESS GUIDE
               </div>
-            )}
+              <p className="text-[11px] text-primary/90 leading-tight">
+                • <strong>Apex Admin</strong>: Sign up with <code className="bg-primary/20 px-1 rounded">admin@cricketvue.com</code><br/>
+                • <strong>Managed Accounts</strong>: Sign up with the email provided by your Parent account to claim your role.
+              </p>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
