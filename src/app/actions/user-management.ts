@@ -7,24 +7,25 @@ import { FirestorePermissionError } from '@/firebase/errors';
 
 /**
  * Creates a sub-account in Firestore. 
- * Note: In a real app, this would also trigger an Auth creation, 
- * but for this prototype, we manage the Firestore profile which users can "claim" by signing up with the same email.
+ * Parent roles create these "pre-auth" profiles. Users then "claim" them by signing up with the same email.
  */
 export async function createSubAccountAction(
   db: Firestore, 
   parentId: string, 
   childData: { username: string, email: string, role: 'super' | 'master' | 'customer' }
 ) {
-  // Use a predictable ID or generate one
-  const childId = childData.email.replace(/[^a-zA-Z0-0]/g, '_');
-  const userRef = doc(db, 'users', childId);
+  // Use lowercase email as the temporary document ID for pre-claiming
+  const lowerEmail = childData.email.toLowerCase();
+  const userRef = doc(db, 'users', lowerEmail);
 
   try {
     await setDoc(userRef, {
       ...childData,
+      email: lowerEmail,
       parentId,
       tokenBalance: 0,
       isActive: true,
+      isPreCreated: true, // Flag to indicate this is a managed account awaiting claim
       createdAt: new Date().toISOString()
     });
     return { success: true };
@@ -58,10 +59,10 @@ export async function transferTokensAction(
       const fromDoc = await transaction.get(fromRef);
       const toDoc = await transaction.get(toRef);
 
-      if (!toDoc.exists()) throw new Error("Recipient not found.");
+      if (!toDoc.exists()) throw new Error("Recipient profile not found in network.");
 
       if (!isApex) {
-        if (!fromDoc.exists()) throw new Error("Sender not found.");
+        if (!fromDoc.exists()) throw new Error("Sender profile not found.");
         const currentBalance = fromDoc.data().tokenBalance || 0;
         if (currentBalance < amount) throw new Error("Insufficient balance.");
 

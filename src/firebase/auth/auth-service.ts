@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -6,7 +7,7 @@ import {
   signOut, 
   Auth 
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, getFirestore } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getFirestore, deleteDoc } from 'firebase/firestore';
 
 /**
  * Signs in a user with email and password.
@@ -23,36 +24,56 @@ export async function loginWithEmail(auth: Auth, email: string, pass: string) {
 
 /**
  * Creates a new user and initializes/claims their Firestore profile.
+ * Handles the "Apex Admin" auto-promotion and the "Managed Profile" claim logic.
  */
 export async function signUpWithEmail(auth: Auth, email: string, pass: string) {
   try {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
     const db = getFirestore();
-    const userRef = doc(db, 'users', result.user.uid);
+    const uid = result.user.uid;
+    const lowerEmail = email.toLowerCase();
     
-    // Check if a profile was already created for this email by a parent (Super/Master)
-    const existingDoc = await getDoc(userRef);
+    // Check for a pre-created profile (stored by email as ID)
+    const tempRef = doc(db, 'users', lowerEmail);
+    const userRef = doc(db, 'users', uid);
     
-    let initialData: any = {
+    const existingDoc = await getDoc(tempRef);
+    
+    let finalData: any = {
       username: email.split('@')[0],
-      email: email,
+      email: lowerEmail,
       isActive: true,
       updatedAt: new Date().toISOString()
     };
 
-    // Auto-assign Apex Admin role for this specific email
-    if (email.toLowerCase() === 'admin@cricketvue.com') {
-      initialData.role = 'admin';
+    // Rule 1: Auto-assign Apex Admin role for the specific root email
+    if (lowerEmail === 'admin@cricketvue.com') {
+      finalData.role = 'admin';
+      finalData.tokenBalance = 0; // Admins have unlimited power, no balance needed
     }
 
-    // Only set default values if the document doesn't already exist
-    if (!existingDoc.exists()) {
-      initialData.role = initialData.role || 'customer';
-      initialData.tokenBalance = 1000;
-      initialData.createdAt = new Date().toISOString();
+    // Rule 2: If a profile was pre-created by a Parent (Admin/Super/Master), inherit its role/data
+    if (existingDoc.exists()) {
+      const preCreatedData = existingDoc.data();
+      finalData = {
+        ...finalData,
+        ...preCreatedData,
+        isPreCreated: false, // Now claimed
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Migration: Delete the temporary email-based document after claiming it into the UID document
+      await deleteDoc(tempRef);
+    } else {
+      // Rule 3: Default behavior for organic signups (not pre-created, not admin)
+      if (lowerEmail !== 'admin@cricketvue.com') {
+        finalData.role = 'customer';
+        finalData.tokenBalance = 1000; // Welcome gift for new players
+        finalData.createdAt = new Date().toISOString();
+      }
     }
 
-    await setDoc(userRef, initialData, { merge: true });
+    await setDoc(userRef, finalData, { merge: true });
 
     return result.user;
   } catch (error: any) {
