@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
@@ -18,6 +17,7 @@ import { logout } from '@/firebase/auth/auth-service';
 import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 export default function Dashboard() {
   const firestore = useFirestore();
