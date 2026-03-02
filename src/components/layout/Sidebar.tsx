@@ -1,24 +1,23 @@
-
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, History, Wallet, Menu, X, Rocket, LogOut, User as UserIcon, LogIn, ShieldAlert, ShieldCheck, Users } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { 
+  Menu, X, ShieldAlert, ShieldCheck, Users, 
+  ChevronDown, Trophy, Zap, Clock, Star, 
+  PlusSquare, PlayCircle, LayoutGrid
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useFirestore, useDoc, useAuth, useUser } from '@/firebase';
+import { useFirestore, useDoc, useUser } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { logout } from '@/firebase/auth/auth-service';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export function Sidebar({ userId }: { userId: string }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const firestore = useFirestore();
-  const auth = useAuth();
   const { user } = useUser();
 
   const userRef = useMemoFirebase(() => {
@@ -28,116 +27,102 @@ export function Sidebar({ userId }: { userId: string }) {
 
   const { data: userData } = useDoc(userRef);
 
-  const navItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'My Bets', href: '/my-bets', icon: History },
-  ];
-
-  // Add management panels based on role
-  if (userData?.role === 'admin') {
-    navItems.push({ name: 'Admin Panel', href: '/admin', icon: ShieldAlert });
-  } else if (userData?.role === 'super') {
-    navItems.push({ name: 'Super Panel', href: '/super', icon: ShieldCheck });
-  } else if (userData?.role === 'master') {
-    navItems.push({ name: 'Master Hub', href: '/master', icon: Users });
-  }
-
-  const tokenBalance = userData?.tokenBalance || 0;
-
-  const handleLogout = async () => {
-    if (auth && user) {
-      await logout(auth);
-    }
-    router.push('/login');
-  };
-
   return (
     <>
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)}>
-          {isOpen ? <X /> : <Menu />}
+      <div className="lg:hidden fixed top-2 left-2 z-50">
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsOpen(!isOpen)}>
+          {isOpen ? <X size={16} /> : <Menu size={16} />}
         </Button>
       </div>
 
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-40 w-64 bg-card border-r border-border transition-transform lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-40 w-[240px] bg-white border-r border-slate-200 transition-transform lg:translate-x-0 shadow-sm",
         !isOpen && "-translate-x-full"
       )}>
-        <div className="flex flex-col h-full p-6">
-          <div className="flex items-center gap-2 mb-10">
-            <div className="p-2 bg-primary rounded-xl shadow-lg vibrant-glow">
-              <Rocket className="w-6 h-6 text-primary-foreground" />
+        <div className="flex flex-col h-full overflow-y-auto custom-scrollbar">
+          {/* Sports Navigation Structure */}
+          <div className="mt-0">
+            <div className="sidebar-section-header">
+              <span>Racing Sports</span>
+              <ChevronDown size={14} />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white font-headline">CricketVue</span>
-          </div>
-
-          <div className="mb-8 flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
-            <Avatar className="h-10 w-10 border border-primary/20">
-              <AvatarImage src={user?.photoURL || undefined} />
-              <AvatarFallback className="bg-primary/20 text-primary">
-                <UserIcon className="w-5 h-5" />
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold truncate text-white">{userData?.username || 'Fan'}</p>
-              <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">
-                {userData?.role || 'Guest'}
-              </p>
+            <div className="bg-slate-50">
+              <div className="sidebar-item">Horse Racing</div>
+              <div className="sidebar-item">Greyhound Racing</div>
             </div>
-          </div>
 
-          {userData?.role !== 'admin' && (
-            <div className="mb-8 p-4 bg-secondary/50 rounded-2xl border border-border">
-              <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider mb-1">
-                <Wallet className="w-3 h-3" />
-                <span>Tokens</span>
-              </div>
-              <div className="text-2xl font-bold text-accent">
-                {tokenBalance.toLocaleString()}
-              </div>
+            <div className="sidebar-section-header mt-1">
+              <span>Others</span>
+              <ChevronDown size={14} />
             </div>
-          )}
-
-          {userData?.role === 'admin' && (
-            <div className="mb-8 p-4 bg-primary/10 rounded-2xl border border-primary/20">
-              <div className="flex items-center gap-2 text-primary text-xs uppercase tracking-wider mb-1">
-                <ShieldAlert className="w-3 h-3" />
-                <span>Apex Admin</span>
-              </div>
-              <div className="text-lg font-black italic text-white">
-                UNLIMITED
-              </div>
+            <div className="bg-slate-50">
+              <div className="sidebar-item">Our Casino</div>
+              <div className="sidebar-item">Our VIP Casino</div>
+              <div className="sidebar-item">Our Premium Casino</div>
+              <div className="sidebar-item">Our Virtual</div>
+              <div className="sidebar-item">Live Casino</div>
+              <div className="sidebar-item">Slot Game</div>
+              <div className="sidebar-item">Fantasy Game</div>
             </div>
-          )}
 
-          <nav className="flex-1 space-y-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group",
-                  pathname === item.href 
-                    ? "bg-primary text-primary-foreground shadow-lg vibrant-glow" 
-                    : "text-muted-foreground hover:bg-muted hover:text-white"
-                )}
-              >
-                <item.icon className={cn("w-5 h-5", pathname === item.href ? "text-white" : "group-hover:scale-110 transition-transform")} />
-                <span className="font-medium">{item.name}</span>
+            <div className="sidebar-section-header mt-1">
+              <span>All Sports</span>
+              <ChevronDown size={14} />
+            </div>
+            <div className="bg-slate-50">
+              <Link href="/dashboard" className={cn("sidebar-item", pathname === '/dashboard' && "bg-slate-200 font-bold text-primary")}>
+                <LayoutGrid size={12} /> Dashboard
               </Link>
-            ))}
-          </nav>
+              <div className="sidebar-item">
+                <PlusSquare size={12} className="text-slate-400" /> Politics
+              </div>
+              <div className="sidebar-item font-bold text-slate-800">
+                <Trophy size={12} className="text-primary" /> Cricket
+              </div>
+              <div className="sidebar-item">
+                <PlusSquare size={12} className="text-slate-400" /> Football
+              </div>
+              <div className="sidebar-item">
+                <PlusSquare size={12} className="text-slate-400" /> Tennis
+              </div>
+              <div className="sidebar-item">
+                <PlusSquare size={12} className="text-slate-400" /> Table Tennis
+              </div>
+              <div className="sidebar-item">
+                <PlusSquare size={12} className="text-slate-400" /> Badminton
+              </div>
+              <div className="sidebar-item">
+                <PlusSquare size={12} className="text-slate-400" /> Esoccer
+              </div>
+            </div>
 
-          <div className="mt-auto pt-6">
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start gap-3 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl"
-              onClick={handleLogout}
-            >
-              <LogOut className="w-5 h-5" />
-              <span className="font-medium">Sign Out</span>
-            </Button>
+            {/* Admin Controls */}
+            {(userData?.role === 'admin' || userData?.role === 'super' || userData?.role === 'master') && (
+              <div className="sidebar-section-header mt-4 bg-slate-800">
+                <span>Management</span>
+                <ShieldAlert size={14} />
+              </div>
+            )}
+            <div className="bg-slate-100">
+              {userData?.role === 'admin' && (
+                <Link href="/admin" className="sidebar-item">
+                  <ShieldAlert size={12} className="text-red-500" /> Apex Admin
+                </Link>
+              )}
+              {userData?.role === 'super' && (
+                <Link href="/super" className="sidebar-item">
+                  <ShieldCheck size={12} className="text-green-600" /> Super Panel
+                </Link>
+              )}
+              {userData?.role === 'master' && (
+                <Link href="/master" className="sidebar-item">
+                  <Users size={12} className="text-blue-600" /> Master Hub
+                </Link>
+              )}
+              <Link href="/my-bets" className="sidebar-item">
+                <Clock size={12} /> My Bets
+              </Link>
+            </div>
           </div>
         </div>
       </aside>

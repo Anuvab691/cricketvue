@@ -4,26 +4,50 @@
 
 @layer base {
   :root {
-    --background: 216 11% 12%;
-    --foreground: 0 0% 100%;
-    --card: 216 11% 15%;
-    --card-foreground: 0 0% 100%;
-    --popover: 216 11% 12%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 220 80% 45%;
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    /* AllPanel Blue */
+    --primary: 200 100% 35%; 
     --primary-foreground: 0 0% 100%;
-    --secondary: 216 11% 20%;
+    /* Dark Navigation Bar */
+    --secondary: 215 25% 27%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 216 11% 25%;
-    --muted-foreground: 216 11% 70%;
-    --accent: 192 100% 60%;
-    --accent-foreground: 216 11% 12%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 216 11% 25%;
-    --input: 216 11% 25%;
-    --ring: 220 80% 45%;
-    --radius: 0.75rem;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 199 89% 48%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.3rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.1% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
   }
 }
 
@@ -36,10 +60,38 @@
   }
 }
 
-.glass-card {
-  @apply bg-card/50 backdrop-blur-md border border-white/10 shadow-xl;
+.exchange-header {
+  @apply bg-[#0077b6] text-white py-2 px-4 flex justify-between items-center shadow-md;
 }
 
-.vibrant-glow {
-  box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.5);
+.exchange-nav {
+  @apply bg-[#2c3e50] text-white flex items-center h-10 px-4 text-xs font-bold uppercase;
+}
+
+.exchange-sub-nav {
+  @apply bg-[#e9ecef] text-slate-700 flex items-center h-9 px-4 text-xs font-bold border-b border-slate-300;
+}
+
+.match-row {
+  @apply border-b border-slate-200 hover:bg-slate-50 transition-colors flex items-center px-4 py-2 bg-white text-sm;
+}
+
+.odds-box {
+  @apply w-12 h-8 flex flex-col items-center justify-center text-[10px] font-bold rounded-sm border cursor-pointer transition-all;
+}
+
+.odds-blue {
+  @apply bg-[#72bbef] border-[#72bbef]/20 text-blue-900 hover:brightness-95;
+}
+
+.odds-pink {
+  @apply bg-[#faa9ba] border-[#faa9ba]/20 text-pink-900 hover:brightness-95;
+}
+
+.sidebar-section-header {
+  @apply bg-[#00a8ff] text-white px-3 py-2 text-xs font-bold flex justify-between items-center cursor-pointer;
+}
+
+.sidebar-item {
+  @apply px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-100 flex items-center gap-2 cursor-pointer border-b border-slate-100;
 }

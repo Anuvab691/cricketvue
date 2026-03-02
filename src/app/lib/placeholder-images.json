@@ -11,6 +11,12 @@
       "description": "Cricket Ball on Pitch",
       "imageUrl": "https://picsum.photos/seed/cricket2/600/400",
       "imageHint": "cricket ball"
+    },
+    {
+      "id": "casino-1",
+      "description": "Premium Casino Room",
+      "imageUrl": "https://picsum.photos/seed/casino1/600/400",
+      "imageHint": "casino room"
     }
   ]
 }

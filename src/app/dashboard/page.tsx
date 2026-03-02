@@ -3,21 +3,30 @@
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { MatchCard } from '@/components/dashboard/MatchCard';
-import { Loader2, Zap, CalendarDays, Clock, LayoutGrid, Radio, ShieldCheck } from 'lucide-react';
+import { MatchRow } from '@/components/dashboard/MatchRow';
+import { GamesGrid } from '@/components/dashboard/GamesGrid';
+import { 
+  Loader2, Search, Bell, Menu, UserCircle, 
+  Wallet, Trophy, Zap, Clock, Info, 
+  ChevronRight, ArrowRightLeft, ShieldCheck 
+} from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { isToday, isTomorrow, parseISO, compareAsc, format, isAfter, startOfToday } from 'date-fns';
+import { format, parseISO, compareAsc, isToday, isAfter, startOfToday } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
+import { logout } from '@/firebase/auth/auth-service';
+import { useAuth } from '@/firebase';
+import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
   const firestore = useFirestore();
+  const auth = useAuth();
+  const router = useRouter();
   const { user } = useUser();
   const [syncing, setSyncing] = useState(false);
   
-  const effectiveUserId = user?.uid || 'guest-user-123';
+  const effectiveUserId = user?.uid || 'guest';
 
-  // Fetch current user profile to verify role
   const userRef = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
@@ -29,158 +38,138 @@ export default function Dashboard() {
     return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
   }, [firestore]);
 
-  const settingsRef = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return doc(firestore, 'app_settings', 'global');
-  }, [firestore]);
-
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
-  const { data: settings } = useDoc(settingsRef);
 
-  /**
-   * Automatic Background Synchronization Heartbeat
-   * Only the Apex Admin triggers writes to Firestore to maintain single source of truth.
-   */
   useEffect(() => {
     if (!firestore || !userData || userData.role !== 'admin') return;
-
     const performSync = async () => {
       setSyncing(true);
       await syncCricketMatchesAction(firestore);
       setSyncing(false);
     };
-
-    const intervalId = setInterval(performSync, 15000); // 15s refresh for "Actual Web" feel
-    performSync(); // Initial sync on mount
-
+    const intervalId = setInterval(performSync, 30000);
+    performSync();
     return () => clearInterval(intervalId);
   }, [firestore, userData]);
 
-  if (matchesLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const handleLogout = async () => {
+    if (auth) await logout(auth);
+    router.push('/login');
+  };
 
   const todayStart = startOfToday();
-  
-  // Strict Filtering: Only current/future matches. Remove past finished matches.
-  const currentAndFutureMatches = (matches || []).filter(m => {
+  const activeMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
-    // Hide finished matches that are older than today
     if (m.status === 'finished' && !isToday(matchTime)) return false;
-    // Show live, upcoming, or today's finished matches
     return isToday(matchTime) || isAfter(matchTime, todayStart);
   });
 
-  const sortedMatches = [...currentAndFutureMatches].sort((a, b) => {
-    return compareAsc(parseISO(a.startTime), parseISO(b.startTime));
-  });
-
-  const liveMatches = sortedMatches.filter(m => m.status === 'live');
-  const upcomingMatches = sortedMatches.filter(m => m.status === 'upcoming');
-  const todayMatches = upcomingMatches.filter(m => isToday(parseISO(m.startTime)));
-  const tomorrowMatches = upcomingMatches.filter(m => isTomorrow(parseISO(m.startTime)));
-  const futureMatches = upcomingMatches.filter(m => !isToday(parseISO(m.startTime)) && !isTomorrow(parseISO(m.startTime)));
-
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex min-h-screen bg-[#f8f9fa] text-slate-900">
       <Sidebar userId={effectiveUserId} />
       
-      <main className="flex-1 lg:pl-64 p-4 lg:p-8">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
-          <div>
-            <h1 className="text-3xl font-bold font-headline mb-2 flex items-center gap-2">
-              <LayoutGrid className="w-8 h-8 text-primary" />
-              Live Match Center
-            </h1>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              {userData?.role === 'admin' && (
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20">
-                  <ShieldCheck className="w-3 h-3" />
-                  {syncing ? 'Syncing Actual Web...' : 'Live Heartbeat Active'}
-                </span>
-              )}
-              {settings?.lastGlobalSync && (
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> 
-                  Server Time: {format(new Date(settings.lastGlobalSync), 'HH:mm:ss')}
-                </span>
-              )}
+      <main className="flex-1 lg:pl-[240px] flex flex-col">
+        {/* Top Header - Blue */}
+        <header className="exchange-header h-12">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-black italic tracking-tighter">ALL</h1>
+            <div className="hidden md:flex items-center gap-2 bg-white/10 rounded px-2 py-1 text-[10px]">
+              <Search size={14} className="opacity-70" />
+              <span>Search Events</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {userData?.role === 'admin' && (
+              <div className="text-[10px] bg-white/20 px-2 py-0.5 rounded flex items-center gap-1">
+                <ShieldCheck size={10} /> {syncing ? 'Syncing...' : 'Live'}
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-xs font-bold">
+              <span className="opacity-80">Balance:</span>
+              <span className="text-yellow-400">
+                {userData?.role === 'admin' ? 'UNLIMITED' : (userData?.tokenBalance || 0).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] opacity-70 cursor-pointer hover:opacity-100" onClick={handleLogout}>
+              <UserCircle size={16} />
+              <span>{userData?.username || 'User'}</span>
             </div>
           </div>
         </header>
 
-        {liveMatches.length > 0 && (
-          <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
-                <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Live Now</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {liveMatches.map(match => (
-                <MatchCard key={match.id} match={match} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {todayMatches.length > 0 && (
-          <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6 border-b border-border/50 pb-4">
-              <CalendarDays className="w-5 h-5 text-accent" />
-              <h2 className="text-xl font-bold uppercase tracking-tighter italic">Today's Schedule</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {todayMatches.map(match => (
-                <MatchCard key={match.id} match={match} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {tomorrowMatches.length > 0 && (
-          <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6 border-b border-border/50 pb-4">
-              <Radio className="w-5 h-5 text-muted-foreground" />
-              <h2 className="text-xl font-bold uppercase tracking-tighter text-muted-foreground italic">Tomorrow</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {tomorrowMatches.map(match => (
-                <MatchCard key={match.id} match={match} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {futureMatches.length > 0 && (
-          <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6 border-b border-border/50 pb-4">
-              <Clock className="w-5 h-5 text-muted-foreground opacity-50" />
-              <h2 className="text-xl font-bold uppercase tracking-tighter text-muted-foreground opacity-50 italic">Upcoming Series</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {futureMatches.map(match => (
-                <MatchCard key={match.id} match={match} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {sortedMatches.length === 0 && (
-          <div className="glass-card p-20 text-center rounded-3xl border-dashed border-white/5">
-            <div className="w-16 h-16 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Clock className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">No Active or Upcoming Matches</h3>
-            <p className="text-muted-foreground max-w-sm mx-auto">Connecting to global servers... live data will appear automatically.</p>
+        {/* Main Nav - Dark */}
+        <nav className="exchange-nav">
+          <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
+            {['Home', 'Lottery', 'Cricket', 'Tennis', 'Football', 'Table Tennis', 'Poker', 'Crash'].map(item => (
+              <span key={item} className={cn("cursor-pointer hover:text-accent whitespace-nowrap", item === 'Cricket' && "text-accent border-b-2 border-accent")}>
+                {item}
+              </span>
+            ))}
           </div>
-        )}
+        </nav>
+
+        {/* Sub Nav - Ticker Style */}
+        <div className="exchange-sub-nav">
+          <div className="flex items-center gap-4 w-full">
+            <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> News
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-[11px] whitespace-nowrap animate-pulse">
+                ICC Champions Trophy 2025: Pakistan vs India scheduled for March 1st. Place your bets now!
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="p-1 md:p-3">
+          {/* Sports Category Tabs */}
+          <div className="flex bg-[#e9ecef] p-0.5 rounded-sm mb-2 overflow-x-auto no-scrollbar">
+            {['Cricket', 'Football', 'Tennis', 'Table Tennis', 'Esoccer', 'Horse Racing', 'Greyhound Racing'].map(sport => (
+              <button 
+                key={sport} 
+                className={cn(
+                  "px-4 py-1.5 text-[10px] font-bold rounded-sm whitespace-nowrap",
+                  sport === 'Cricket' ? "bg-[#2c3e50] text-white" : "text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                {sport}
+              </button>
+            ))}
+          </div>
+
+          {/* Match Table Header */}
+          <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
+            <div className="flex-1">Game</div>
+            <div className="w-[180px] flex justify-around text-center">
+              <div className="w-12">1</div>
+              <div className="w-12">X</div>
+              <div className="w-12">2</div>
+            </div>
+          </div>
+
+          {/* Match List */}
+          <div className="border-x border-slate-200">
+            {matchesLoading ? (
+              <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
+            ) : activeMatches.length > 0 ? (
+              activeMatches.map(match => (
+                <MatchRow key={match.id} match={match} />
+              ))
+            ) : (
+              <div className="p-12 text-center text-xs text-slate-400 bg-white">No active cricket matches found.</div>
+            )}
+          </div>
+
+          {/* Games Grid Section */}
+          <div className="mt-6">
+            <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 px-1">Exclusive Games</h3>
+            <GamesGrid />
+          </div>
+        </div>
       </main>
     </div>
   );
