@@ -1,12 +1,13 @@
+
 'use client';
 
-import { useAuth, useUser } from '@/firebase';
+import { useAuth, useUser, useFirestore } from '@/firebase';
 import { loginWithEmail, signUpWithEmail } from '@/firebase/auth/auth-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Rocket, Loader2, KeyRound, Mail, ArrowLeft, Info, ShieldAlert } from 'lucide-react';
+import { Rocket, Loader2, KeyRound, Mail, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
@@ -15,6 +16,7 @@ import Link from 'next/link';
 export default function LoginPage() {
   const { user, loading } = useUser();
   const auth = useAuth();
+  const firestore = useFirestore();
   const router = useRouter();
   
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -30,12 +32,12 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth) return;
+    if (!auth || !firestore) return;
     
     setIsSigningIn(true);
     try {
       if (isSignUp) {
-        await signUpWithEmail(auth, email, password);
+        await signUpWithEmail(auth, firestore, email, password);
         toast({ title: "Account Created", description: "Welcome to CricketVue!" });
       } else {
         await loginWithEmail(auth, email, password);
@@ -86,7 +88,7 @@ export default function LoginPage() {
             </CardTitle>
             <CardDescription className="text-center">
               {isSignUp 
-                ? 'Join the network and start your betting journey.' 
+                ? 'Join the network and claim your pre-created role.' 
                 : 'Sign in to access your administrative panel.'}
             </CardDescription>
           </CardHeader>
@@ -97,8 +99,8 @@ export default function LoginPage() {
                 HIERARCHY ACCESS GUIDE
               </div>
               <p className="text-[11px] text-primary/90 leading-tight">
-                • <strong>Apex Admin</strong>: Toggle to <b>Sign Up</b> with <code className="bg-primary/20 px-1 rounded">admin@cricketvue.com</code> and <b>any password</b> you choose.<br/>
-                • <strong>Managed Accounts</strong>: Sign up with the email provided by your Parent account to claim your role.
+                • <strong>Apex Admin</strong>: Sign Up with <code className="bg-primary/20 px-1 rounded">admin@cricketvue.com</code>.<br/>
+                • <strong>Managed Roles</strong>: Your Parent must create you first. Then, <b>Sign Up</b> with that exact email to claim your role.
               </p>
             </div>
 
@@ -143,7 +145,7 @@ export default function LoginPage() {
                 {isSigningIn ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  isSignUp ? 'Create My Account' : 'Sign In'
+                  isSignUp ? 'Register & Claim Role' : 'Sign In'
                 )}
               </Button>
             </form>
@@ -153,7 +155,7 @@ export default function LoginPage() {
                 onClick={() => setIsSignUp(!isSignUp)}
                 className="text-sm text-accent hover:underline font-bold"
               >
-                {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
+                {isSignUp ? 'Already have an account? Sign In' : 'Need to claim an account? Sign Up'}
               </button>
             </div>
           </CardContent>
