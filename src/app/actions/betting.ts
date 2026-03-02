@@ -14,6 +14,7 @@ export async function placeBetAction(db: Firestore, userId: string, betData: any
 
   try {
     await runTransaction(db, async (transaction) => {
+      // 1. READS
       const userDoc = await transaction.get(userRef);
       if (!userDoc.exists()) {
         throw new Error("User profile not found. Please ensure you are logged in.");
@@ -24,6 +25,7 @@ export async function placeBetAction(db: Firestore, userId: string, betData: any
         throw new Error("Insufficient balance to place this bet.");
       }
 
+      // 2. WRITES (All reads MUST come before writes)
       transaction.update(userRef, {
         tokenBalance: currentBalance - betData.stake
       });
@@ -62,14 +64,17 @@ export async function settleMockBet(db: Firestore, userId: string, betId: string
 
   try {
     await runTransaction(db, async (transaction) => {
+      // 1. ALL READS FIRST
       const betDoc = await transaction.get(betRef);
+      const userDoc = await transaction.get(userRef);
+
       if (!betDoc.exists()) return;
       if (betDoc.data().status !== 'open') return;
 
+      // 2. ALL WRITES SECOND
       transaction.update(betRef, { status: result });
 
-      if (result === 'won') {
-        const userDoc = await transaction.get(userRef);
+      if (result === 'won' && userDoc.exists()) {
         const currentBalance = userDoc.data()?.tokenBalance || 0;
         transaction.update(userRef, {
           tokenBalance: currentBalance + potentialWin
@@ -96,15 +101,21 @@ export async function cancelBetAction(db: Firestore, userId: string, betId: stri
 
   try {
     await runTransaction(db, async (transaction) => {
+      // 1. ALL READS FIRST (CRITICAL)
       const betDoc = await transaction.get(betRef);
       if (!betDoc.exists()) throw new Error("Bet not found");
+      
       const betData = betDoc.data();
       if (betData.status !== 'open') throw new Error("Bet is already settled or cancelled");
 
-      // Fetch current odds from the market to determine current rate value
+      // We need to check if the market still exists to get live odds
       const marketRef = doc(db, 'matches', betData.matchId, 'markets', betData.marketId);
       const marketDoc = await transaction.get(marketRef);
       
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) throw new Error("User profile not found");
+
+      // 2. COMPUTE LOGIC
       let currentOdds = betData.odds;
       if (marketDoc.exists()) {
         const marketData = marketDoc.data();
@@ -114,17 +125,17 @@ export async function cancelBetAction(db: Firestore, userId: string, betId: stri
         }
       }
 
-      // Calculation: (Original Stake * (Original Odds / Current Odds)) * 0.95
-      // The 0.95 multiplier applies the mandatory 5% deduction
-      const cancelValue = (betData.stake * (betData.odds / currentOdds)) * 0.95;
+      // Calculation: (Original Stake * (Original Odds / Current Odds)) * 0.95 (5% deduction)
+      // Rounded down to nearest whole token
+      const cancelValue = Math.floor((betData.stake * (betData.odds / currentOdds)) * 0.95);
 
+      // 3. ALL WRITES SECOND
       transaction.update(betRef, { 
         status: 'cancelled', 
         returnedAmount: cancelValue,
         cancelledAt: new Date().toISOString()
       });
 
-      const userDoc = await transaction.get(userRef);
       const currentBalance = userDoc.data()?.tokenBalance || 0;
       transaction.update(userRef, {
         tokenBalance: currentBalance + cancelValue
@@ -132,6 +143,7 @@ export async function cancelBetAction(db: Firestore, userId: string, betId: stri
     });
     return { success: true };
   } catch (e: any) {
+    console.error("Bet Cancellation Failed:", e);
     if (e.code === 'permission-denied' || e.message?.includes('permission')) {
       const permissionError = new FirestorePermissionError({
         path: betRef.path,
