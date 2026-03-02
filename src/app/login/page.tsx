@@ -97,7 +97,7 @@ export default function LoginPage() {
                 HIERARCHY ACCESS GUIDE
               </div>
               <p className="text-[11px] text-primary/90 leading-tight">
-                • <strong>Apex Admin</strong>: Sign up with <code className="bg-primary/20 px-1 rounded">admin@cricketvue.com</code><br/>
+                • <strong>Apex Admin</strong>: Toggle to <b>Sign Up</b> with <code className="bg-primary/20 px-1 rounded">admin@cricketvue.com</code> and <b>any password</b> you choose.<br/>
                 • <strong>Managed Accounts</strong>: Sign up with the email provided by your Parent account to claim your role.
               </p>
             </div>
