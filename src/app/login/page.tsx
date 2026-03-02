@@ -1,13 +1,12 @@
-
 'use client';
 
 import { useAuth, useUser, useFirestore } from '@/firebase';
-import { loginWithEmail, signUpWithEmail } from '@/firebase/auth/auth-service';
+import { accessSystem } from '@/firebase/auth/auth-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Rocket, Loader2, KeyRound, Mail, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { Rocket, Loader2, KeyRound, Mail, ArrowLeft, ShieldAlert, LockKeyhole } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
@@ -19,8 +18,7 @@ export default function LoginPage() {
   const firestore = useFirestore();
   const router = useRouter();
   
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -34,23 +32,21 @@ export default function LoginPage() {
     e.preventDefault();
     if (!auth || !firestore) return;
     
-    setIsSigningIn(true);
+    setIsProcessing(true);
     try {
-      if (isSignUp) {
-        await signUpWithEmail(auth, firestore, email, password);
-        toast({ title: "Account Created", description: "Welcome to CricketVue!" });
-      } else {
-        await loginWithEmail(auth, email, password);
-        toast({ title: "Welcome Back", description: "Successfully signed in." });
-      }
+      await accessSystem(auth, firestore, email, password);
+      toast({ 
+        title: "Access Granted", 
+        description: "Welcome to the CricketVue Network." 
+      });
     } catch (error: any) {
       toast({ 
-        title: "Authentication Failed", 
-        description: error.message || "Check your credentials and try again.",
+        title: "Access Denied", 
+        description: error.message || "Invalid credentials or unauthorized email.",
         variant: "destructive"
       });
     } finally {
-      setIsSigningIn(false);
+      setIsProcessing(false);
     }
   };
 
@@ -68,7 +64,7 @@ export default function LoginPage() {
         <div className="flex justify-start">
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
-              <ArrowLeft className="w-4 h-4" /> Back to Dashboard (Guest Mode)
+              <ArrowLeft className="w-4 h-4" /> Guest View
             </Button>
           </Link>
         </div>
@@ -78,41 +74,39 @@ export default function LoginPage() {
             <Rocket className="w-10 h-10 text-primary-foreground" />
           </div>
           <h1 className="text-4xl font-black tracking-tighter font-headline">CricketVue</h1>
-          <p className="text-muted-foreground">Apex Hierarchy & Token Management</p>
+          <p className="text-muted-foreground">Secure Network Management</p>
         </div>
 
         <Card className="glass-card border-white/10 rounded-3xl overflow-hidden shadow-2xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-bold text-center">
-              {isSignUp ? 'Create Account' : 'Welcome Back'}
-            </CardTitle>
-            <CardDescription className="text-center">
-              {isSignUp 
-                ? 'Join the network and claim your pre-created role.' 
-                : 'Sign in to access your administrative panel.'}
+          <CardHeader className="pb-2 text-center">
+            <div className="flex justify-center mb-2">
+              <LockKeyhole className="w-6 h-6 text-accent opacity-50" />
+            </div>
+            <CardTitle className="text-xl font-bold">Network Access</CardTitle>
+            <CardDescription>
+              Enter your credentials to access your terminal.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
             <div className="mb-6 p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-2">
               <div className="flex items-center gap-2 text-primary font-bold text-xs">
                 <ShieldAlert className="w-4 h-4" />
-                HIERARCHY ACCESS GUIDE
+                AUTHORIZED PERSONNEL ONLY
               </div>
               <p className="text-[11px] text-primary/90 leading-tight">
-                • <strong>Apex Admin</strong>: Sign Up with <code className="bg-primary/20 px-1 rounded">admin@cricketvue.com</code>.<br/>
-                • <strong>Managed Roles</strong>: Your Parent must create you first. Then, <b>Sign Up</b> with that exact email to claim your role.
+                This system is closed to the public. If you are a new Super, Master, or Customer, enter your email and set your password to activate your pre-authorized profile.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">Work Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input 
                     id="email"
                     type="email" 
-                    placeholder="name@example.com" 
+                    placeholder="name@cricketvue.com" 
                     className="pl-10 h-12 bg-background/50 border-white/10"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -122,7 +116,7 @@ export default function LoginPage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Security Password</Label>
                 <div className="relative">
                   <KeyRound className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input 
@@ -139,24 +133,19 @@ export default function LoginPage() {
 
               <Button 
                 type="submit"
-                disabled={isSigningIn}
+                disabled={isProcessing}
                 className="w-full h-12 bg-primary hover:bg-primary/90 font-bold rounded-xl gap-3 transition-all active:scale-95 mt-4 shadow-lg shadow-primary/20"
               >
-                {isSigningIn ? (
+                {isProcessing ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  isSignUp ? 'Register & Claim Role' : 'Sign In'
+                  'Enter Network'
                 )}
               </Button>
             </form>
             
-            <div className="mt-6 text-center">
-              <button 
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-sm text-accent hover:underline font-bold"
-              >
-                {isSignUp ? 'Already have an account? Sign In' : 'Need to claim an account? Sign Up'}
-              </button>
+            <div className="mt-8 text-center text-[10px] text-muted-foreground uppercase tracking-widest opacity-50">
+              © 2025 CricketVue Apex Hierarchy
             </div>
           </CardContent>
         </Card>

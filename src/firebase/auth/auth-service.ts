@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -10,78 +9,75 @@ import {
 import { doc, setDoc, getDoc, Firestore, deleteDoc } from 'firebase/firestore';
 
 /**
- * Signs in a user with email and password.
+ * Handles the unified access flow. 
+ * Tries to sign in; if the user doesn't exist, it checks if they are authorized (Admin or Pre-created) 
+ * and signs them up automatically.
  */
-export async function loginWithEmail(auth: Auth, email: string, pass: string) {
+export async function accessSystem(auth: Auth, db: Firestore, email: string, pass: string) {
+  const lowerEmail = email.toLowerCase();
+  
   try {
-    const result = await signInWithEmailAndPassword(auth, email, pass);
+    // 1. Attempt standard login
+    const result = await signInWithEmailAndPassword(auth, lowerEmail, pass);
     return result.user;
   } catch (error: any) {
-    console.error("Error signing in:", error.code, error.message);
+    // 2. If user doesn't exist in Auth, check if they are authorized to join
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+      
+      // Check Firestore for a pre-created profile or if it's the Apex Admin
+      const isApex = lowerEmail === 'admin@cricketvue.com';
+      const tempRef = doc(db, 'users', lowerEmail);
+      const existingDoc = await getDoc(tempRef);
+      const isAuthorized = isApex || existingDoc.exists();
+
+      if (!isAuthorized) {
+        throw new Error("Access Denied: Your email is not authorized in this network. Please contact your manager.");
+      }
+
+      // 3. Perform the "Claim" signup
+      return await signUpAndClaim(auth, db, lowerEmail, pass, existingDoc.exists() ? existingDoc.data() : null);
+    }
+    
     throw error;
   }
 }
 
 /**
- * Creates a new user and initializes/claims their Firestore profile.
- * Handles the "Apex Admin" auto-promotion and the "Managed Profile" claim logic.
+ * Internal helper to create the auth user and sync the Firestore profile.
  */
-export async function signUpWithEmail(auth: Auth, db: Firestore, email: string, pass: string) {
-  try {
-    const result = await createUserWithEmailAndPassword(auth, email, pass);
-    const uid = result.user.uid;
-    const lowerEmail = email.toLowerCase();
-    
-    // Check for a pre-created profile (stored by email as ID)
-    const tempRef = doc(db, 'users', lowerEmail);
-    const userRef = doc(db, 'users', uid);
-    
-    // Explicitly check for the pre-created profile BEFORE setting defaults
-    const existingDoc = await getDoc(tempRef);
-    const hasPreCreated = existingDoc.exists();
-    
-    let finalData: any = {
-      uid,
-      username: email.split('@')[0],
-      email: lowerEmail,
-      isActive: true,
-      updatedAt: new Date().toISOString()
+async function signUpAndClaim(auth: Auth, db: Firestore, email: string, pass: string, preCreatedData: any) {
+  const result = await createUserWithEmailAndPassword(auth, email, pass);
+  const uid = result.user.uid;
+  const userRef = doc(db, 'users', uid);
+  
+  let finalData: any = {
+    uid,
+    username: email.split('@')[0],
+    email: email,
+    isActive: true,
+    updatedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
+
+  // Apex Admin Logic
+  if (email === 'admin@cricketvue.com') {
+    finalData.role = 'admin';
+    finalData.tokenBalance = 0;
+    finalData.isApex = true;
+  } 
+  // Managed Role Logic
+  else if (preCreatedData) {
+    finalData = {
+      ...finalData,
+      ...preCreatedData,
+      isPreCreated: false, // Now claimed
     };
-
-    // Rule 1: Auto-assign Apex Admin role for the specific root email
-    if (lowerEmail === 'admin@cricketvue.com') {
-      finalData.role = 'admin';
-      finalData.tokenBalance = 0; 
-      finalData.isApex = true;
-    } 
-    // Rule 2: If a profile was pre-created by a Parent, inherit its role/data
-    else if (hasPreCreated) {
-      const preCreatedData = existingDoc.data();
-      finalData = {
-        ...finalData,
-        ...preCreatedData,
-        isPreCreated: false, // Now claimed
-        updatedAt: new Date().toISOString()
-      };
-      
-      // Clean up the temporary email-based document
-      await deleteDoc(tempRef);
-    } 
-    // Rule 3: Default behavior for organic signups
-    else {
-      finalData.role = 'customer';
-      finalData.tokenBalance = 1000;
-      finalData.createdAt = new Date().toISOString();
-    }
-
-    // Save the finalized profile to the UID-indexed document
-    await setDoc(userRef, finalData, { merge: true });
-
-    return result.user;
-  } catch (error: any) {
-    console.error("Error signing up:", error.code, error.message);
-    throw error;
+    // Clean up the temporary email-based document
+    await deleteDoc(doc(db, 'users', email));
   }
+
+  await setDoc(userRef, finalData, { merge: true });
+  return result.user;
 }
 
 /**
