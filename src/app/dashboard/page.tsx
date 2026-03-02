@@ -6,14 +6,22 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchCard } from '@/components/dashboard/MatchCard';
 import { Loader2, Zap, CalendarDays, Clock, LayoutGrid, Radio } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 import { isToday, isTomorrow, parseISO, compareAsc, format, isAfter, startOfToday } from 'date-fns';
+import { useEffect } from 'react';
+import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 
 export default function Dashboard() {
   const firestore = useFirestore();
   const { user } = useUser();
   
   const effectiveUserId = user?.uid || 'guest-user-123';
+
+  // Fetch current user data to check for admin status
+  const userRef = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user?.uid]);
+  const { data: userData } = useDoc(userRef);
 
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -28,6 +36,21 @@ export default function Dashboard() {
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
   const { data: settings } = useDoc(settingsRef);
 
+  // Automatic Background Synchronization
+  // Only the Admin or an authorized user should trigger the writes to avoid race conditions
+  useEffect(() => {
+    if (!firestore || !userData || userData.role !== 'admin') return;
+
+    const intervalId = setInterval(() => {
+      syncCricketMatchesAction(firestore);
+    }, 15000); // Sync every 15 seconds for a lively demo feel
+
+    // Initial sync
+    syncCricketMatchesAction(firestore);
+
+    return () => clearInterval(intervalId);
+  }, [firestore, userData]);
+
   if (matchesLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -38,23 +61,10 @@ export default function Dashboard() {
 
   const todayStart = startOfToday();
   
-  /**
-   * Filter matches based on current date.
-   * Only show:
-   * 1. Matches happening today (Live or Upcoming)
-   * 2. Matches happening in the future (Tomorrow onwards)
-   * Exclude:
-   * 1. Past matches (before today start)
-   * 2. Finished matches (to keep view clean)
-   */
   const currentAndFutureMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
-    
-    // Explicitly hide finished games to focus on current/upcoming
     if (m.status === 'finished') return false;
-    
-    // Only show if the match is today or in the future
     return isToday(matchTime) || isAfter(matchTime, todayStart);
   });
 
@@ -80,7 +90,7 @@ export default function Dashboard() {
             </h1>
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent rounded-full border border-accent/20">
-                <Zap className="w-3 h-3" /> Real-Time Updates
+                <Zap className="w-3 h-3" /> Auto-Updating (Demo Mode)
               </span>
               {settings?.lastGlobalSync && (
                 <span className="flex items-center gap-1">
@@ -90,7 +100,7 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-          <SyncDataButton />
+          {/* Refresh button removed for automatic updates */}
         </header>
 
         {liveMatches.length > 0 && (
@@ -157,7 +167,7 @@ export default function Dashboard() {
               <Clock className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-xl font-bold mb-2">No Active or Upcoming Matches</h3>
-            <p className="text-muted-foreground max-w-sm mx-auto">Click "Refresh Live Scores" to pull the absolute latest international fixtures from the global servers.</p>
+            <p className="text-muted-foreground max-w-sm mx-auto">Connecting to global servers... live data will appear automatically.</p>
           </div>
         )}
       </main>
