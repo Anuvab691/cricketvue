@@ -24,6 +24,7 @@ export default function Dashboard() {
   const router = useRouter();
   const { user } = useUser();
   const [syncing, setSyncing] = useState(false);
+  const [activeNav, setActiveNav] = useState('Cricket');
   
   const effectiveUserId = user?.uid || 'guest';
 
@@ -58,11 +59,18 @@ export default function Dashboard() {
   };
 
   const todayStart = startOfToday();
-  const activeMatches = (matches || []).filter(m => {
+  const baseActiveMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
     if (m.status === 'finished' && !isToday(matchTime)) return false;
     return isToday(matchTime) || isAfter(matchTime, todayStart);
+  });
+
+  // Navigation Filter Logic
+  const filteredMatches = baseActiveMatches.filter(m => {
+    if (activeNav === 'In-Play') return m.status === 'live';
+    if (activeNav === 'Multi Markets') return m.status === 'live' || m.status === 'upcoming';
+    return true; // Home or Cricket
   });
 
   return (
@@ -103,7 +111,14 @@ export default function Dashboard() {
         <nav className="exchange-nav">
           <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
             {['Home', 'Cricket', 'In-Play', 'Multi Markets'].map(item => (
-              <span key={item} className={cn("cursor-pointer hover:text-accent whitespace-nowrap", item === 'Cricket' && "text-accent border-b-2 border-accent")}>
+              <span 
+                key={item} 
+                onClick={() => setActiveNav(item)}
+                className={cn(
+                  "cursor-pointer hover:text-accent whitespace-nowrap transition-all px-1 py-2 text-[11px]",
+                  activeNav === item ? "text-accent border-b-2 border-accent" : "text-white/70"
+                )}
+              >
                 {item}
               </span>
             ))}
@@ -118,7 +133,7 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap animate-pulse">
-                Upcoming: Champions Trophy 2025 schedules announced. Stay tuned for live betting markets!
+                {activeNav === 'In-Play' ? 'Showing all matches currently being played live.' : 'Upcoming: Champions Trophy 2025 schedules announced. Stay tuned!'}
               </p>
             </div>
           </div>
@@ -143,7 +158,7 @@ export default function Dashboard() {
 
           {/* Match Table Header */}
           <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
-            <div className="flex-1">Match Event</div>
+            <div className="flex-1">Match Event ({activeNav})</div>
             <div className="w-[180px] flex justify-around text-center">
               <div className="w-12">1</div>
               <div className="w-12">X</div>
@@ -155,12 +170,14 @@ export default function Dashboard() {
           <div className="border-x border-slate-200">
             {matchesLoading ? (
               <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
-            ) : activeMatches.length > 0 ? (
-              activeMatches.map(match => (
+            ) : filteredMatches.length > 0 ? (
+              filteredMatches.map(match => (
                 <MatchRow key={match.id} match={match} />
               ))
             ) : (
-              <div className="p-12 text-center text-xs text-slate-400 bg-white">No active cricket matches found.</div>
+              <div className="p-12 text-center text-xs text-slate-400 bg-white">
+                {activeNav === 'In-Play' ? 'No matches are currently live.' : 'No active cricket matches found.'}
+              </div>
             )}
           </div>
 
