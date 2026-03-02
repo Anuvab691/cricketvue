@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
-import { PlayCircle, Clock, Info, Smartphone, Monitor, Trophy } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { PlayCircle, Monitor, Smartphone } from 'lucide-react';
 
 export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
   
-  // Market simulation (for UI only)
+  // Market simulation (for UI summary display)
   const backOdds = 1.90;
   const layOdds = 2.10;
 
@@ -41,8 +40,7 @@ export function MatchRow({ match }: { match: any }) {
       </div>
 
       <div className="w-[180px] flex justify-around">
-        {/* Back and Lay simulation buttons */}
-        <div className="flex gap-0.5">
+        <Link href={`/match/${match.id}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
             <span>{backOdds.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
@@ -51,7 +49,7 @@ export function MatchRow({ match }: { match: any }) {
             <span>{layOdds.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
-        </div>
+        </Link>
         
         <div className="flex gap-0.5 opacity-30">
           <div className="odds-box bg-slate-100">
@@ -62,7 +60,7 @@ export function MatchRow({ match }: { match: any }) {
           </div>
         </div>
 
-        <div className="flex gap-0.5">
+        <Link href={`/match/${match.id}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
             <span>{(backOdds + 0.1).toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
@@ -71,7 +69,7 @@ export function MatchRow({ match }: { match: any }) {
             <span>{(layOdds + 0.1).toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
-        </div>
+        </Link>
       </div>
     </div>
   );
