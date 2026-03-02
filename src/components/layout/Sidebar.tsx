@@ -25,6 +25,13 @@ export function Sidebar({ userId }: { userId: string }) {
 
   const { data: userData } = useDoc(userRef);
 
+  const matchCentreLinks = [
+    { name: 'International', href: '/match-centre/international' },
+    { name: 'T20 Leagues', href: '/match-centre/t20' },
+    { name: 'Test Series', href: '/match-centre/test' },
+    { name: 'One Day Int\'l', href: '/match-centre/odi' },
+  ];
+
   return (
     <>
       <div className="lg:hidden fixed top-2 left-2 z-50">
@@ -48,7 +55,7 @@ export function Sidebar({ userId }: { userId: string }) {
               <Link href="/dashboard" className={cn("sidebar-item", pathname === '/dashboard' && "bg-slate-200 font-bold text-primary")}>
                 <LayoutGrid size={12} /> Dashboard
               </Link>
-              <div className={cn("sidebar-item font-bold text-slate-800", pathname.includes('match') && "text-primary")}>
+              <div className={cn("sidebar-item font-bold text-slate-800", pathname.includes('match') && !pathname.includes('centre') && "text-primary")}>
                 <Trophy size={12} className="text-primary" /> Live Cricket
               </div>
             </div>
@@ -59,10 +66,18 @@ export function Sidebar({ userId }: { userId: string }) {
               <ChevronDown size={14} />
             </div>
             <div className="bg-slate-50">
-              <div className="sidebar-item">International</div>
-              <div className="sidebar-item">T20 Leagues</div>
-              <div className="sidebar-item">Test Series</div>
-              <div className="sidebar-item">One Day Int'l</div>
+              {matchCentreLinks.map((link) => (
+                <Link 
+                  key={link.href}
+                  href={link.href} 
+                  className={cn(
+                    "sidebar-item", 
+                    pathname === link.href && "bg-slate-200 font-bold text-primary"
+                  )}
+                >
+                  {link.name}
+                </Link>
+              ))}
             </div>
 
             {/* User Activity */}
