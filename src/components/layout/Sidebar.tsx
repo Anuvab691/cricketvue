@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Menu, X, ShieldAlert, ShieldCheck, Users, 
-  ChevronDown, Trophy, Zap, Clock, Star, 
-  PlusSquare, PlayCircle, LayoutGrid
+  ChevronDown, Trophy, Clock, LayoutGrid
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -18,7 +17,6 @@ export function Sidebar({ userId }: { userId: string }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const firestore = useFirestore();
-  const { user } = useUser();
 
   const userRef = useMemoFirebase(() => {
     if (!firestore || !userId) return null;
@@ -40,88 +38,67 @@ export function Sidebar({ userId }: { userId: string }) {
         !isOpen && "-translate-x-full"
       )}>
         <div className="flex flex-col h-full overflow-y-auto custom-scrollbar">
-          {/* Sports Navigation Structure */}
           <div className="mt-0">
+            {/* Main Navigation */}
             <div className="sidebar-section-header">
-              <span>Racing Sports</span>
-              <ChevronDown size={14} />
-            </div>
-            <div className="bg-slate-50">
-              <div className="sidebar-item">Horse Racing</div>
-              <div className="sidebar-item">Greyhound Racing</div>
-            </div>
-
-            <div className="sidebar-section-header mt-1">
-              <span>Others</span>
-              <ChevronDown size={14} />
-            </div>
-            <div className="bg-slate-50">
-              <div className="sidebar-item">Our Casino</div>
-              <div className="sidebar-item">Our VIP Casino</div>
-              <div className="sidebar-item">Our Premium Casino</div>
-              <div className="sidebar-item">Our Virtual</div>
-              <div className="sidebar-item">Live Casino</div>
-              <div className="sidebar-item">Slot Game</div>
-              <div className="sidebar-item">Fantasy Game</div>
-            </div>
-
-            <div className="sidebar-section-header mt-1">
-              <span>All Sports</span>
+              <span>Main Menu</span>
               <ChevronDown size={14} />
             </div>
             <div className="bg-slate-50">
               <Link href="/dashboard" className={cn("sidebar-item", pathname === '/dashboard' && "bg-slate-200 font-bold text-primary")}>
                 <LayoutGrid size={12} /> Dashboard
               </Link>
-              <div className="sidebar-item">
-                <PlusSquare size={12} className="text-slate-400" /> Politics
+              <div className={cn("sidebar-item font-bold text-slate-800", pathname.includes('match') && "text-primary")}>
+                <Trophy size={12} className="text-primary" /> Live Cricket
               </div>
-              <div className="sidebar-item font-bold text-slate-800">
-                <Trophy size={12} className="text-primary" /> Cricket
-              </div>
-              <div className="sidebar-item">
-                <PlusSquare size={12} className="text-slate-400" /> Football
-              </div>
-              <div className="sidebar-item">
-                <PlusSquare size={12} className="text-slate-400" /> Tennis
-              </div>
-              <div className="sidebar-item">
-                <PlusSquare size={12} className="text-slate-400" /> Table Tennis
-              </div>
-              <div className="sidebar-item">
-                <PlusSquare size={12} className="text-slate-400" /> Badminton
-              </div>
-              <div className="sidebar-item">
-                <PlusSquare size={12} className="text-slate-400" /> Esoccer
-              </div>
+            </div>
+
+            {/* Cricket Categories */}
+            <div className="sidebar-section-header mt-1">
+              <span>Match Center</span>
+              <ChevronDown size={14} />
+            </div>
+            <div className="bg-slate-50">
+              <div className="sidebar-item">International</div>
+              <div className="sidebar-item">T20 Leagues</div>
+              <div className="sidebar-item">Test Series</div>
+              <div className="sidebar-item">One Day Int'l</div>
+            </div>
+
+            {/* User Activity */}
+            <div className="sidebar-section-header mt-1">
+              <span>My Stats</span>
+              <ChevronDown size={14} />
+            </div>
+            <div className="bg-slate-50">
+              <Link href="/my-bets" className={cn("sidebar-item", pathname === '/my-bets' && "bg-slate-200 font-bold text-primary")}>
+                <Clock size={12} /> My Bets
+              </Link>
             </div>
 
             {/* Admin Controls */}
             {(userData?.role === 'admin' || userData?.role === 'super' || userData?.role === 'master') && (
               <div className="sidebar-section-header mt-4 bg-slate-800">
-                <span>Management</span>
+                <span>Network Management</span>
                 <ShieldAlert size={14} />
               </div>
             )}
             <div className="bg-slate-100">
               {userData?.role === 'admin' && (
-                <Link href="/admin" className="sidebar-item">
+                <Link href="/admin" className={cn("sidebar-item", pathname === '/admin' && "bg-slate-200 font-bold")}>
                   <ShieldAlert size={12} className="text-red-500" /> Apex Admin
                 </Link>
               )}
               {userData?.role === 'super' && (
-                <Link href="/super" className="sidebar-item">
+                <Link href="/super" className={cn("sidebar-item", pathname === '/super' && "bg-slate-200 font-bold")}>
                   <ShieldCheck size={12} className="text-green-600" /> Super Panel
                 </Link>
               )}
               {userData?.role === 'master' && (
-                <Link href="/master" className="sidebar-item">
+                <Link href="/master" className={cn("sidebar-item", pathname === '/master' && "bg-slate-200 font-bold")}>
                   <Users size={12} className="text-blue-600" /> Master Hub
                 </Link>
               )}
-              <Link href="/my-bets" className="sidebar-item">
-                <Clock size={12} /> My Bets
-              </Link>
             </div>
           </div>
         </div>

@@ -76,7 +76,7 @@ export default function Dashboard() {
             <h1 className="text-2xl font-black italic tracking-tighter">ALL</h1>
             <div className="hidden md:flex items-center gap-2 bg-white/10 rounded px-2 py-1 text-[10px]">
               <Search size={14} className="opacity-70" />
-              <span>Search Events</span>
+              <span>Search Matches</span>
             </div>
           </div>
           
@@ -99,10 +99,10 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Main Nav - Dark */}
+        {/* Main Nav - Dark (Cricket Focused) */}
         <nav className="exchange-nav">
           <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
-            {['Home', 'Lottery', 'Cricket', 'Tennis', 'Football', 'Table Tennis', 'Poker', 'Crash'].map(item => (
+            {['Home', 'Cricket', 'In-Play', 'Multi Markets'].map(item => (
               <span key={item} className={cn("cursor-pointer hover:text-accent whitespace-nowrap", item === 'Cricket' && "text-accent border-b-2 border-accent")}>
                 {item}
               </span>
@@ -114,11 +114,11 @@ export default function Dashboard() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> News
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live News
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap animate-pulse">
-                ICC Champions Trophy 2025: Pakistan vs India scheduled for March 1st. Place your bets now!
+                Upcoming: Champions Trophy 2025 schedules announced. Stay tuned for live betting markets!
               </p>
             </div>
           </div>
@@ -126,13 +126,13 @@ export default function Dashboard() {
 
         {/* Content Area */}
         <div className="p-1 md:p-3">
-          {/* Sports Category Tabs */}
+          {/* Sports Category Tabs (Simplified to Cricket only) */}
           <div className="flex bg-[#e9ecef] p-0.5 rounded-sm mb-2 overflow-x-auto no-scrollbar">
-            {['Cricket', 'Football', 'Tennis', 'Table Tennis', 'Esoccer', 'Horse Racing', 'Greyhound Racing'].map(sport => (
+            {['Cricket'].map(sport => (
               <button 
                 key={sport} 
                 className={cn(
-                  "px-4 py-1.5 text-[10px] font-bold rounded-sm whitespace-nowrap",
+                  "px-6 py-1.5 text-[10px] font-bold rounded-sm whitespace-nowrap",
                   sport === 'Cricket' ? "bg-[#2c3e50] text-white" : "text-slate-600 hover:bg-slate-200"
                 )}
               >
@@ -143,7 +143,7 @@ export default function Dashboard() {
 
           {/* Match Table Header */}
           <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
-            <div className="flex-1">Game</div>
+            <div className="flex-1">Match Event</div>
             <div className="w-[180px] flex justify-around text-center">
               <div className="w-12">1</div>
               <div className="w-12">X</div>
@@ -164,9 +164,9 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Games Grid Section */}
+          {/* Games Grid Section (Cricket Focused) */}
           <div className="mt-6">
-            <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 px-1">Exclusive Games</h3>
+            <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 px-1">Cricket Specials</h3>
             <GamesGrid />
           </div>
         </div>

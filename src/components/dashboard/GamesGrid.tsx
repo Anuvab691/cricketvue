@@ -4,18 +4,18 @@ import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export function GamesGrid() {
-  // Use a subset or repeat of placeholder images for the grid effect
+  // Cricket-only focused games for the dashboard
   const games = [
-    { name: 'SUPER OVER', id: 'cricket-ball' },
-    { name: 'IPL 2025', id: 'match-banner-1' },
-    { name: 'CRICKET MATKA', id: 'cricket-ball' },
-    { name: 'WORLD CUP 2027', id: 'match-banner-1' },
-    { name: 'STADIUM LIVE', id: 'cricket-ball' },
-    { name: 'PREMIUM CRICKET', id: 'match-banner-1' },
-    { name: 'VIP BETTING', id: 'cricket-ball' },
-    { name: 'INSTANT WIN', id: 'match-banner-1' },
-    { name: 'BALL BY BALL', id: 'cricket-ball' },
-    { name: 'BATTING MASTER', id: 'match-banner-1' },
+    { name: 'SUPER OVER LIVE', id: 'cricket-ball' },
+    { name: 'CHAMPIONS TROPHY', id: 'match-banner-1' },
+    { name: 'BOUNDARY BLITZ', id: 'cricket-ball' },
+    { name: 'WICKET WATCH', id: 'match-banner-1' },
+    { name: 'TEST CLASSIC', id: 'cricket-ball' },
+    { name: 'T20 SMASH', id: 'match-banner-1' },
+    { name: 'CREASE MASTER', id: 'cricket-ball' },
+    { name: 'STADIUM VIP', id: 'match-banner-1' },
+    { name: 'BALL-BY-BALL', id: 'cricket-ball' },
+    { name: 'BATTING LEGENDS', id: 'match-banner-1' },
   ];
 
   return (
