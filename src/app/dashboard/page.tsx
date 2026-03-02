@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
@@ -24,7 +25,7 @@ export default function Dashboard() {
   const router = useRouter();
   const { user } = useUser();
   const [syncing, setSyncing] = useState(false);
-  const [activeNav, setActiveNav] = useState('Cricket');
+  const [activeNav, setActiveNav] = useState('Home');
   
   const effectiveUserId = user?.uid || 'guest';
 
@@ -41,6 +42,7 @@ export default function Dashboard() {
 
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
 
+  // Background Sync (Only for Admin)
   useEffect(() => {
     if (!firestore || !userData || userData.role !== 'admin') return;
     const performSync = async () => {
@@ -62,6 +64,7 @@ export default function Dashboard() {
   const baseActiveMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
+    // Show live, upcoming, or matches that finished today
     if (m.status === 'finished' && !isToday(matchTime)) return false;
     return isToday(matchTime) || isAfter(matchTime, todayStart);
   });
@@ -70,7 +73,7 @@ export default function Dashboard() {
   const filteredMatches = baseActiveMatches.filter(m => {
     if (activeNav === 'In-Play') return m.status === 'live';
     if (activeNav === 'Multi Markets') return m.status === 'live' || m.status === 'upcoming';
-    return true; // Home or Cricket
+    return true; // Home or Cricket (show all)
   });
 
   return (
@@ -81,7 +84,9 @@ export default function Dashboard() {
         {/* Top Header - Blue */}
         <header className="exchange-header h-12">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-black italic tracking-tighter">ALL</h1>
+            <Link href="/">
+               <h1 className="text-2xl font-black italic tracking-tighter">ALL</h1>
+            </Link>
             <div className="hidden md:flex items-center gap-2 bg-white/10 rounded px-2 py-1 text-[10px]">
               <Search size={14} className="opacity-70" />
               <span>Search Matches</span>
@@ -91,7 +96,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             {userData?.role === 'admin' && (
               <div className="text-[10px] bg-white/20 px-2 py-0.5 rounded flex items-center gap-1">
-                <ShieldCheck size={10} /> {syncing ? 'Syncing...' : 'Live'}
+                <ShieldCheck size={10} /> {syncing ? 'Syncing Actual Web...' : 'Live'}
               </div>
             )}
             <div className="flex items-center gap-2 text-xs font-bold">
@@ -109,18 +114,18 @@ export default function Dashboard() {
 
         {/* Main Nav - Dark (Cricket Focused) */}
         <nav className="exchange-nav">
-          <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-6 overflow-x-auto no-scrollbar h-full">
             {['Home', 'Cricket', 'In-Play', 'Multi Markets'].map(item => (
-              <span 
+              <button 
                 key={item} 
                 onClick={() => setActiveNav(item)}
                 className={cn(
-                  "cursor-pointer hover:text-accent whitespace-nowrap transition-all px-1 py-2 text-[11px]",
-                  activeNav === item ? "text-accent border-b-2 border-accent" : "text-white/70"
+                  "cursor-pointer hover:text-accent whitespace-nowrap transition-all px-1 h-full text-[11px] font-bold uppercase flex items-center border-b-2",
+                  activeNav === item ? "text-accent border-accent" : "text-white/70 border-transparent"
                 )}
               >
                 {item}
-              </span>
+              </button>
             ))}
           </div>
         </nav>
@@ -133,7 +138,9 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap animate-pulse">
-                {activeNav === 'In-Play' ? 'Showing all matches currently being played live.' : 'Upcoming: Champions Trophy 2025 schedules announced. Stay tuned!'}
+                {activeNav === 'In-Play' 
+                  ? 'Showing all matches currently being played live globally.' 
+                  : 'Upcoming: Champions Trophy 2025 schedules announced. Syncing official web data...'}
               </p>
             </div>
           </div>
@@ -167,9 +174,12 @@ export default function Dashboard() {
           </div>
 
           {/* Match List */}
-          <div className="border-x border-slate-200">
+          <div className="border-x border-slate-200 shadow-sm">
             {matchesLoading ? (
-              <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
+              <div className="p-20 flex flex-col items-center gap-3 bg-white">
+                <Loader2 className="animate-spin text-primary" size={32} />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loading Markets</span>
+              </div>
             ) : filteredMatches.length > 0 ? (
               filteredMatches.map(match => (
                 <MatchRow key={match.id} match={match} />
