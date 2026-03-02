@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Rocket, Loader2, KeyRound, Mail, ArrowLeft } from 'lucide-react';
+import { Rocket, Loader2, KeyRound, Mail, ArrowLeft, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
@@ -91,6 +91,15 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
+            {!isSignUp && (
+              <div className="mb-6 p-3 bg-primary/10 border border-primary/20 rounded-xl flex items-start gap-3">
+                <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-[11px] text-primary/90 leading-tight font-medium">
+                  Don't have an account yet? Toggle to <button onClick={() => setIsSignUp(true)} className="underline font-bold">Sign Up</button> to create your credentials with any email.
+                </p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
@@ -127,12 +136,12 @@ export default function LoginPage() {
               <Button 
                 type="submit"
                 disabled={isSigningIn}
-                className="w-full h-12 bg-primary hover:bg-primary/90 font-bold rounded-xl gap-3 transition-all active:scale-95 mt-4"
+                className="w-full h-12 bg-primary hover:bg-primary/90 font-bold rounded-xl gap-3 transition-all active:scale-95 mt-4 shadow-lg shadow-primary/20"
               >
                 {isSigningIn ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  isSignUp ? 'Sign Up' : 'Sign In'
+                  isSignUp ? 'Create My Account' : 'Sign In'
                 )}
               </Button>
             </form>
@@ -140,7 +149,7 @@ export default function LoginPage() {
             <div className="mt-6 text-center">
               <button 
                 onClick={() => setIsSignUp(!isSignUp)}
-                className="text-sm text-accent hover:underline font-medium"
+                className="text-sm text-accent hover:underline font-bold"
               >
                 {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
               </button>
