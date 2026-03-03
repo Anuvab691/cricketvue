@@ -14,7 +14,7 @@ export interface ExternalMatch {
   venue: string;
   date: string;
   series?: string;
-  seriesId?: string; // Added to track competition association
+  seriesId?: string;
   teams: string[];
   score?: Array<{
     r: string;
@@ -38,7 +38,6 @@ export interface ExternalTournament {
   type: string;
 }
 
-// Global Sportradar API Base
 const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
 
 /**
@@ -47,7 +46,6 @@ const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
 async function fetchFromSportradar(endpoint: string) {
   const apiKey = process.env.CRICKET_API_KEY;
   if (!apiKey || apiKey === 'YOUR_API_KEY_HERE' || apiKey === '') {
-    // Return empty instead of crashing if key is missing during initialization
     return null;
   }
 
@@ -55,7 +53,6 @@ async function fetchFromSportradar(endpoint: string) {
   const url = `${SPORTRADAR_BASE_URL}${cleanEndpoint}?api_key=${apiKey}`;
 
   try {
-    console.log(`[Sportradar] Fetching: ${url.split('?')[0]}`); 
     const response = await fetch(url, {
       cache: 'no-store',
       headers: { 'Accept': 'application/json' }
@@ -66,9 +63,7 @@ async function fetchFromSportradar(endpoint: string) {
       return null;
     }
 
-    if (!response.ok) {
-      return null;
-    }
+    if (!response.ok) return null;
 
     return await response.json();
   } catch (error: any) {
@@ -79,11 +74,11 @@ async function fetchFromSportradar(endpoint: string) {
 
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
+    // summaries.json is the gold standard for live scores and probabilities
     const json = await fetchFromSportradar('schedules/live/summaries.json');
     if (!json || !json.summaries) return [];
     return json.summaries.map(transformSportradarMatch);
   } catch (e) {
-    console.error("fetchLiveMatches failed:", e);
     return [];
   }
 }
@@ -95,14 +90,10 @@ export async function fetchDailySchedule(dateString?: string): Promise<ExternalM
     if (!json || !json.summaries) return [];
     return json.summaries.map(transformSportradarMatch);
   } catch (e) {
-    console.error(`fetchDailySchedule failed for ${date}:`, e);
     return [];
   }
 }
 
-/**
- * Fetches all available competitions from Sportradar.
- */
 export async function fetchCompetitions(): Promise<ExternalTournament[]> {
   try {
     const json = await fetchFromSportradar('competitions.json');
@@ -116,7 +107,6 @@ export async function fetchCompetitions(): Promise<ExternalTournament[]> {
       type: c.type || 'league'
     }));
   } catch (e) {
-    console.error("fetchCompetitions failed:", e);
     return [];
   }
 }
