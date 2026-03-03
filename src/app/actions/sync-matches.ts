@@ -1,3 +1,4 @@
+
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
@@ -29,7 +30,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     
     const allMatches = Array.from(matchMap.values());
 
-    // Filter out placeholders
+    // Filter out placeholders or trial-limited generic names
     const validMatches = allMatches.filter(m => {
       const t1 = (m.teams[0] || '').toLowerCase().trim();
       const t2 = (m.teams[1] || '').toLowerCase().trim();
@@ -38,14 +39,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
         t1.includes('team a') || t1.includes('team b') || 
         t2.includes('team a') || t2.includes('team b') ||
         t1 === 'tba' || t2 === 'tba' ||
-        t1 === 'placeholder';
+        t1 === 'placeholder' || t1 === 'to be announced';
         
       return !isGeneric;
     });
 
     const apiMatchIds = new Set(validMatches.map(m => m.id.replace(/:/g, '_')));
 
-    // CLEANUP
+    // CLEANUP: Always check for existing matches that are no longer in the active Sportradar feed
     const matchesRef = collection(db, 'matches');
     const existingSnap = await getDocs(matchesRef);
     const deleteBatch = writeBatch(db);
@@ -53,6 +54,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     existingSnap.forEach((docSnap) => {
       const data = docSnap.data();
+      // Only purge if it's from the Sportradar source and NOT in the current valid feed
       if (data.source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
         deleteBatch.delete(docSnap.ref);
         deletedCount++;
@@ -63,6 +65,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       await deleteBatch.commit();
     }
     
+    // If no real matches are found in the feed (or API is disconnected), we report success with 0 count
     if (validMatches.length === 0) {
       await updateSyncStatus(db, 'success', 0, deletedCount);
       return { success: true, count: 0, deleted: deletedCount };
@@ -134,7 +137,6 @@ export async function clearAllMatchesAction(db: Firestore) {
     const snapshot = await getDocs(matchesRef);
     if (snapshot.empty) return { success: true, count: 0 };
     
-    // Use batches for deletion if large
     const batch = writeBatch(db);
     snapshot.docs.forEach(doc => batch.delete(doc.ref));
     await batch.commit();
