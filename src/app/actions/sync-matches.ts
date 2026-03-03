@@ -1,12 +1,12 @@
-
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/cricket-api-service';
 
 /**
  * Syncs actual real-world cricket data from Sportradar into our Firestore matches collection.
- * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed.
+ * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed
+ * or contain generic placeholder names (Team A / Team B).
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -20,17 +20,31 @@ export async function syncCricketMatchesAction(db: Firestore) {
     [...scheduledMatches, ...liveMatches].forEach(m => matchMap.set(m.id, m));
     
     const allMatches = Array.from(matchMap.values());
-    const apiMatchIds = new Set(allMatches.map(m => m.id.replace(/:/g, '_')));
 
-    // 1. CLEANUP: Remove matches from Firestore that are not in the current API response
+    // Filter out matches with generic/masked names "Team A" or "Team B" 
+    // (Common in Sportradar trial keys or uninitialized events)
+    const validMatches = allMatches.filter(m => {
+      const t1 = (m.teams[0] || '').toLowerCase();
+      const t2 = (m.teams[1] || '').toLowerCase();
+      const isGeneric = 
+        t1.includes('team a') || t1.includes('team b') || 
+        t2.includes('team a') || t2.includes('team b') ||
+        t1 === 'tba' || t2 === 'tba';
+      return !isGeneric;
+    });
+
+    const apiMatchIds = new Set(validMatches.map(m => m.id.replace(/:/g, '_')));
+
+    // 1. CLEANUP: Remove matches from Firestore that are not in the current VALID API response
     const matchesRef = collection(db, 'matches');
     const existingSnap = await getDocs(matchesRef);
     const deleteBatch = writeBatch(db);
     let deletedCount = 0;
 
     existingSnap.forEach((docSnap) => {
-      // Don't delete matches that aren't from the API (though currently all are)
-      if (docSnap.data().source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
+      const data = docSnap.data();
+      // Delete if it's from Sportradar but no longer in the valid API set
+      if (data.source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
         deleteBatch.delete(docSnap.ref);
         deletedCount++;
       }
@@ -40,13 +54,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
       await deleteBatch.commit();
     }
     
-    if (allMatches.length === 0) {
+    if (validMatches.length === 0) {
       updateSyncStatus(db, 'success', 0, deletedCount);
       return { success: true, count: 0, deleted: deletedCount };
     }
 
-    // 2. UPDATE/CREATE: Push latest data to Firestore
-    const batchPromises = allMatches.map(async (m) => {
+    // 2. UPDATE/CREATE: Push latest valid data to Firestore
+    const batchPromises = validMatches.map(async (m) => {
       const safeId = m.id.replace(/:/g, '_');
       const matchRef = doc(db, 'matches', safeId);
       
@@ -96,8 +110,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     await Promise.all(batchPromises);
 
-    updateSyncStatus(db, 'success', allMatches.length, deletedCount);
-    return { success: true, count: allMatches.length, deleted: deletedCount };
+    updateSyncStatus(db, 'success', validMatches.length, deletedCount);
+    return { success: true, count: validMatches.length, deleted: deletedCount };
   } catch (error: any) {
     console.error("Sync Internal Failure:", error);
     updateSyncStatus(db, 'error', 0, 0, error.message);
