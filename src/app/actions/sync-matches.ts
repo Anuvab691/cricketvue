@@ -2,23 +2,34 @@
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
-import { fetchLiveMatches, ExternalMatch } from '@/services/cricket-api-service';
+import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/cricket-api-service';
 
 /**
- * Syncs actual real-world cricket data into our Firestore matches collection.
- * Now comprehensive: fetches live scores and today's scheduled events.
+ * Syncs actual real-world cricket data from Sportradar into our Firestore matches collection.
+ * Merges live matches with today's scheduled matches.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    const matchesFromApi = await fetchLiveMatches();
+    const [liveMatches, scheduledMatches] = await Promise.all([
+      fetchLiveMatches(),
+      fetchDailySchedule()
+    ]);
+
+    // Merge matches, prioritizing live ones for the same ID
+    const matchMap = new Map<string, ExternalMatch>();
+    [...scheduledMatches, ...liveMatches].forEach(m => matchMap.set(m.id, m));
     
-    if (!matchesFromApi || matchesFromApi.length === 0) {
-      console.log("Sync: No active or scheduled matches found.");
+    const allMatches = Array.from(matchMap.values());
+    
+    if (allMatches.length === 0) {
+      console.log("Sync: No matches found for today.");
       return { success: true, count: 0 };
     }
 
-    const batchPromises = matchesFromApi.map(async (m) => {
-      const matchRef = doc(db, 'matches', m.id);
+    const batchPromises = allMatches.map(async (m) => {
+      // Clean ID for Firestore (Sportradar IDs look like sr:sport_event:12345)
+      const safeId = m.id.replace(/:/g, '_');
+      const matchRef = doc(db, 'matches', safeId);
       
       let status: 'live' | 'upcoming' | 'finished' = 'upcoming';
       if (m.matchEnded) {
@@ -27,15 +38,15 @@ export async function syncCricketMatchesAction(db: Firestore) {
         status = 'live';
       }
 
-      const scoreString = (m.score && m.score.length > 0)
-        ? m.score.map(s => `${s.inning}: ${s.r || 0}`).join(' | ')
+      const scoreString = m.score 
+        ? m.score.map(s => `${s.inning}: ${s.r}`).join(' | ')
         : (status === 'live' ? 'Live - Score Updating...' : 'Scheduled');
 
       const matchData = {
-        teamA: m.teams[0] || 'TBD',
-        teamB: m.teams[1] || 'TBD',
+        teamA: m.teams[0],
+        teamB: m.teams[1],
         startTime: m.date,
-        series: m.series || 'International Series',
+        series: m.series,
         matchType: m.matchType,
         status: status,
         statusText: m.status,
@@ -46,8 +57,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
       await setDoc(matchRef, matchData, { merge: true });
         
-      // Ensure basic markets exist for every match
-      const marketsRef = collection(db, 'matches', m.id, 'markets');
+      // Ensure basic markets exist
+      const marketsRef = collection(db, 'matches', safeId, 'markets');
       const marketsSnap = await getDocs(marketsRef).catch(() => null);
       
       if (marketsSnap && marketsSnap.empty) {
@@ -56,8 +67,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
           type: 'match_winner',
           status: 'open',
           selections: [
-            { id: 'sel_a', name: m.teams[0] || 'Team A', odds: 1.90 },
-            { id: 'sel_b', name: m.teams[1] || 'Team B', odds: 1.90 }
+            { id: 'sel_a', name: m.teams[0], odds: 1.90 },
+            { id: 'sel_b', name: m.teams[1], odds: 1.90 }
           ]
         });
 
@@ -81,10 +92,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const settingsRef = doc(db, 'app_settings', 'global');
     await setDoc(settingsRef, { 
       lastGlobalSync: new Date().toISOString(),
-      activeMatchesCount: matchesFromApi.length 
+      activeMatchesCount: allMatches.length 
     }, { merge: true });
 
-    return { success: true, count: matchesFromApi.length };
+    return { success: true, count: allMatches.length };
   } catch (error: any) {
     console.error("Sync Internal Failure:", error);
     return { error: error.message };
