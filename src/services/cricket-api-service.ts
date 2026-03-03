@@ -26,48 +26,45 @@ export interface ExternalMatch {
 
 /**
  * CONFIGURATION: The API key is pulled from environment variables.
- * Replace the value in your .env file to update it manually.
+ * Ensure you have CRICKET_API_KEY set in your .env file.
  */
-const CRICKET_API_KEY = process.env.CRICKET_API_KEY || "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
+const CRICKET_API_KEY = process.env.CRICKET_API_KEY;
 const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
 
 /**
  * Fetches current real-world matches from the configured API provider.
- * Uses a low revalidation time to ensure data is fresh.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     if (!CRICKET_API_KEY || CRICKET_API_KEY === 'YOUR_API_KEY_HERE') {
-      console.warn("Cricket API Key is missing or default. Please add a valid CRICKET_API_KEY to your .env file.");
+      console.warn("Cricket API Key is missing or invalid. Please check your .env file.");
       return [];
     }
 
     const response = await fetch(`${API_BASE_URL}?apikey=${CRICKET_API_KEY}`, {
-      next: { revalidate: 10 } // Refresh every 10 seconds for "Actual Web" speed
+      next: { revalidate: 15 } // Revalidate every 15s to keep "Actual Web" speed
     });
     
     if (!response.ok) {
-      throw new Error(`Cricket API Error: ${response.status} ${response.statusText}`);
+      throw new Error(`API Error: ${response.status}`);
     }
 
     const json = await response.json();
     
     if (json.status !== 'success' || !json.data) {
-      console.warn("API returned empty or error state:", json.reason);
       return [];
     }
 
     // Process and normalize the data
     return json.data
       .filter((m: any) => {
-        // Filter: Remove IPL and specific minor leagues for a professional look
-        const name = (m.name || '').toLowerCase();
         const series = (m.series || '').toLowerCase();
-        return !name.includes('ipl') && !series.includes('ipl');
+        // Keep professional/international focus
+        return !series.includes('minor') && !series.includes('test-only');
       })
       .map((m: any) => ({
         id: m.id || `match-${Math.random().toString(36).substr(2, 9)}`,
-        name: m.name || 'International Fixture',
+        name: m.name || 'International Match',
         matchType: m.matchType || 't20',
         status: m.status || 'Scheduled',
         venue: m.venue || 'Global Stadium',
@@ -79,7 +76,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
         matchEnded: m.matchEnded || false
       }));
   } catch (error) {
-    console.error("Critical Sync Error:", error);
+    console.error("Fetch Error:", error);
     return [];
   }
 }

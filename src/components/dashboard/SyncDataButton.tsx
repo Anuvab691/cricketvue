@@ -4,9 +4,13 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useFirestore } from '@/firebase';
 import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
-import { RefreshCw, CheckCircle2 } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
+/**
+ * A specialized button for triggering a manual sync with the external Cricket API.
+ * Primarily intended for Admins to verify their API Key and refresh the dashboard.
+ */
 export function SyncDataButton() {
   const [loading, setLoading] = useState(false);
   const firestore = useFirestore();
@@ -15,38 +19,46 @@ export function SyncDataButton() {
     if (!firestore) return;
     setLoading(true);
     
-    const result = await syncCricketMatchesAction(firestore);
-    
-    if (result.success) {
+    try {
+      const result = await syncCricketMatchesAction(firestore);
+      
+      if (result.success) {
+        toast({
+          title: "Sync Successful",
+          description: `Successfully updated ${result.count || 0} real-time matches.`,
+        });
+      } else {
+        toast({
+          title: "Sync Failed",
+          description: result.error || "Check your API key in the .env file.",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
       toast({
-        title: "Data Synced",
-        description: `Successfully updated ${result.count} real-time matches from API.`,
-      });
-    } else {
-      toast({
-        title: "Sync Failed",
-        description: result.error || "Could not connect to cricket data provider.",
+        title: "Network Error",
+        description: "Could not reach the cricket data provider.",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (
     <Button 
-      variant="outline" 
+      variant="ghost" 
       size="sm" 
       onClick={handleSync} 
       disabled={loading}
-      className="gap-2 border-primary/20 hover:border-primary/50 bg-primary/5"
+      className="h-7 text-[10px] font-black uppercase tracking-tighter bg-white/10 hover:bg-white/20 text-white gap-1.5"
     >
       {loading ? (
-        <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+        <RefreshCw className="w-3 h-3 animate-spin" />
       ) : (
-        <RefreshCw className="w-4 h-4 text-primary" />
+        <RefreshCw className="w-3 h-3" />
       )}
-      <span className="hidden sm:inline">Refresh Live Scores</span>
+      <span>Refresh Actual Web</span>
     </Button>
   );
 }

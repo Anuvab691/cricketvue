@@ -5,6 +5,7 @@ import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MatchRow } from '@/components/dashboard/MatchRow';
 import { GamesGrid } from '@/components/dashboard/GamesGrid';
+import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 import { 
   Loader2, Search, UserCircle, 
   Zap, ShieldCheck 
@@ -50,7 +51,7 @@ export default function Dashboard() {
       await syncCricketMatchesAction(firestore);
       setSyncing(false);
     };
-    const intervalId = setInterval(performSync, 15000);
+    const intervalId = setInterval(performSync, 60000); // Background sync every 60s
     performSync();
     return () => clearInterval(intervalId);
   }, [firestore, userData]);
@@ -95,17 +96,20 @@ export default function Dashboard() {
           
           <div className="flex items-center gap-4">
             {userData?.role === 'admin' && (
-              <div className="text-[10px] bg-white/20 px-2 py-0.5 rounded flex items-center gap-1">
-                <ShieldCheck size={10} /> {syncing ? 'Syncing Actual Web...' : 'Live'}
+              <div className="flex items-center gap-2">
+                <SyncDataButton />
+                <div className="text-[10px] bg-white/20 px-2 py-1 rounded flex items-center gap-1 text-white">
+                  <ShieldCheck size={10} /> {syncing ? 'Syncing...' : 'Network Live'}
+                </div>
               </div>
             )}
-            <div className="flex items-center gap-2 text-xs font-bold">
+            <div className="flex items-center gap-2 text-xs font-bold text-white">
               <span className="opacity-80">Balance:</span>
               <span className="text-yellow-400">
                 {userData?.role === 'admin' ? 'UNLIMITED' : (userData?.tokenBalance || 0).toLocaleString()}
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[10px] opacity-70 cursor-pointer hover:opacity-100" onClick={handleLogout}>
+            <div className="flex items-center gap-1 text-[10px] text-white opacity-70 cursor-pointer hover:opacity-100" onClick={handleLogout}>
               <UserCircle size={16} />
               <span>{userData?.username || 'User'}</span>
             </div>
@@ -140,7 +144,7 @@ export default function Dashboard() {
               <p className="text-[11px] whitespace-nowrap animate-pulse">
                 {activeNav === 'In-Play' 
                   ? 'Showing all matches currently being played live globally.' 
-                  : 'Upcoming: Champions Trophy 2025 schedules announced. Syncing official web data...'}
+                  : 'Welcome to the premium exchange. All matches synced with real-time web providers.'}
               </p>
             </div>
           </div>
@@ -148,21 +152,6 @@ export default function Dashboard() {
 
         {/* Content Area */}
         <div className="p-1 md:p-3">
-          {/* Sports Category Tabs (Simplified to Cricket only) */}
-          <div className="flex bg-[#e9ecef] p-0.5 rounded-sm mb-2 overflow-x-auto no-scrollbar">
-            {['Cricket'].map(sport => (
-              <button 
-                key={sport} 
-                className={cn(
-                  "px-6 py-1.5 text-[10px] font-bold rounded-sm whitespace-nowrap",
-                  sport === 'Cricket' ? "bg-[#2c3e50] text-white" : "text-slate-600 hover:bg-slate-200"
-                )}
-              >
-                {sport}
-              </button>
-            ))}
-          </div>
-
           {/* Match Table Header */}
           <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
             <div className="flex-1">Match Event ({activeNav})</div>
@@ -178,7 +167,7 @@ export default function Dashboard() {
             {matchesLoading ? (
               <div className="p-20 flex flex-col items-center gap-3 bg-white">
                 <Loader2 className="animate-spin text-primary" size={32} />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loading Markets</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Connecting to Markets</span>
               </div>
             ) : filteredMatches.length > 0 ? (
               filteredMatches.map(match => (
