@@ -66,17 +66,18 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 }
 
 /**
- * Fetches today's full schedule from Sportradar.
+ * Fetches a specific day's schedule from Sportradar.
+ * @param dateString YYYY-MM-DD format. Defaults to today.
  */
-export async function fetchDailySchedule(): Promise<ExternalMatch[]> {
-  const today = new Date().toISOString().split('T')[0];
-  const json = await fetchFromSportradar(`schedules/${today}/summaries.json`);
+export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
+  const date = dateString || new Date().toISOString().split('T')[0];
+  const json = await fetchFromSportradar(`schedules/${date}/summaries.json`);
   if (!json || !json.summaries) return [];
   return json.summaries.map(transformSportradarMatch);
 }
 
 /**
- * Normalizes Sportradar summary object to our InternalMatch interface.
+ * Normalizes Sportradar summary object to our ExternalMatch interface.
  */
 function transformSportradarMatch(summary: any): ExternalMatch {
   const { sport_event, sport_event_status } = summary;

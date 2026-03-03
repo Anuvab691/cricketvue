@@ -1,3 +1,4 @@
+
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
@@ -5,24 +6,35 @@ import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/
 
 /**
  * Syncs actual real-world cricket data from Sportradar into our Firestore matches collection.
- * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed
- * or contain generic placeholder names (Team A / Team B).
+ * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed.
+ * Fetches a 3-day window (Today, Tomorrow, Day After) to ensure upcoming matches are visible.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    const [liveMatches, scheduledMatches] = await Promise.all([
+    // 1. Prepare date strings for Today, Tomorrow, and Day After
+    const datesToSync = [0, 1, 2].map(offset => {
+      const d = new Date();
+      d.setDate(d.getDate() + offset);
+      return d.toISOString().split('T')[0];
+    });
+
+    // 2. Fetch Live Matches and 3-day Schedule in parallel
+    const [liveMatches, ...schedules] = await Promise.all([
       fetchLiveMatches(),
-      fetchDailySchedule()
+      ...datesToSync.map(date => fetchDailySchedule(date))
     ]);
 
-    // Merge matches, prioritizing live ones for the same ID
+    // 3. Merge matches, prioritizing live ones for the same ID
     const matchMap = new Map<string, ExternalMatch>();
-    [...scheduledMatches, ...liveMatches].forEach(m => matchMap.set(m.id, m));
+    
+    // Process scheduled matches first
+    schedules.flat().forEach(m => matchMap.set(m.id, m));
+    // Process live matches second (overwriting scheduled ones if they are the same)
+    liveMatches.forEach(m => matchMap.set(m.id, m));
     
     const allMatches = Array.from(matchMap.values());
 
-    // Filter out matches with generic/masked names "Team A" or "Team B" 
-    // (Common in Sportradar trial keys or uninitialized events)
+    // 4. Filter out matches with generic/masked names "Team A" or "Team B" 
     const validMatches = allMatches.filter(m => {
       const t1 = (m.teams[0] || '').toLowerCase();
       const t2 = (m.teams[1] || '').toLowerCase();
@@ -35,7 +47,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     const apiMatchIds = new Set(validMatches.map(m => m.id.replace(/:/g, '_')));
 
-    // 1. CLEANUP: Remove matches from Firestore that are not in the current VALID API response
+    // 5. CLEANUP: Remove matches from Firestore that are not in the current VALID API response window
     const matchesRef = collection(db, 'matches');
     const existingSnap = await getDocs(matchesRef);
     const deleteBatch = writeBatch(db);
@@ -43,7 +55,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     existingSnap.forEach((docSnap) => {
       const data = docSnap.data();
-      // Delete if it's from Sportradar but no longer in the valid API set
+      // Only delete if it's from Sportradar and not in the current 3-day API set
       if (data.source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
         deleteBatch.delete(docSnap.ref);
         deletedCount++;
@@ -59,7 +71,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: true, count: 0, deleted: deletedCount };
     }
 
-    // 2. UPDATE/CREATE: Push latest valid data to Firestore
+    // 6. UPDATE/CREATE: Push latest valid data to Firestore
     const batchPromises = validMatches.map(async (m) => {
       const safeId = m.id.replace(/:/g, '_');
       const matchRef = doc(db, 'matches', safeId);
