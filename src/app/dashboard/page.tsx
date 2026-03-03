@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
@@ -8,7 +9,6 @@ import {
   Zap, ShieldCheck, Database, RefreshCw, Globe, AlertTriangle
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { parseISO, isToday, isAfter, startOfToday } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { logout } from '@/firebase/auth/auth-service';
 import { useAuth } from '@/firebase';
@@ -16,6 +16,9 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
+import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
+import { MatchRow } from '@/components/dashboard/MatchRow';
+import { GamesGrid } from '@/components/dashboard/GamesGrid';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -23,6 +26,7 @@ export default function Dashboard() {
   const router = useRouter();
   const { user } = useUser();
   const [activeNav, setActiveNav] = useState('Home');
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const effectiveUserId = user?.uid || 'guest';
 
@@ -32,21 +36,37 @@ export default function Dashboard() {
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
 
+  const matchesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
+  }, [firestore]);
+  const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
+
   const settingsRef = useMemoFirebase(() => {
     if (!firestore) return null;
     return doc(firestore, 'app_settings', 'global');
   }, [firestore]);
   const { data: settings } = useDoc(settingsRef);
 
-  // Background sync is REMOVED per user request
+  // High-Frequency Auto-Sync (10 seconds)
+  useEffect(() => {
+    if (!firestore || userData?.role !== 'admin') return;
+
+    const interval = setInterval(async () => {
+      setIsSyncing(true);
+      await syncCricketMatchesAction(firestore);
+      setIsSyncing(false);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [firestore, userData?.role]);
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
     router.push('/login');
   };
 
-  // Matches are filtered out to be empty for "remove all matches" request
-  const filteredMatches = []; 
+  const filteredMatches = matches || [];
 
   return (
     <div className="flex min-h-screen bg-[#f8f9fa] text-slate-900">
@@ -63,8 +83,11 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             {userData?.role === 'admin' && (
               <div className="flex items-center gap-2">
-                <div className="text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 text-white/50">
-                  <ShieldCheck size={10} /> SYNC OFFLINE
+                <div className={cn(
+                  "text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 transition-all",
+                  isSyncing ? "text-yellow-400 animate-pulse" : "text-white/50"
+                )}>
+                  <ShieldCheck size={10} /> {isSyncing ? 'AUTO-SYNCING...' : 'NETWORK LIVE'}
                 </div>
                 <SyncDataButton />
               </div>
@@ -102,11 +125,11 @@ export default function Dashboard() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> System Note
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live Updates
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap">
-                Real-world data synchronization is currently paused. No active matches are being displayed.
+                {isSyncing ? 'Synchronizing fresh data from Actual Web source...' : `Last Sync: ${settings?.lastGlobalSync ? new Date(settings.lastGlobalSync).toLocaleTimeString() : 'Awaiting sync'}`}
               </p>
             </div>
           </div>
@@ -114,26 +137,50 @@ export default function Dashboard() {
 
         <div className="p-1 md:p-3">
           <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
-            <div className="flex-1">Live Feed (Offline)</div>
+            <div className="flex-1">Match</div>
+            <div className="w-[180px] flex justify-around">
+               <span>Winner</span>
+               <span>Bookmaker</span>
+               <span>Fancy</span>
+            </div>
           </div>
 
           <div className="border-x border-slate-200 shadow-sm">
-            <div className="p-20 text-center flex flex-col items-center gap-4 bg-white border-b border-slate-200">
-              <Database size={40} className="text-slate-200" />
-              <div className="space-y-1">
-                <p className="text-sm font-black uppercase text-slate-400">Terminal Empty</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  Syncing is disabled. No matches are currently available.
-                </p>
+            {matchesLoading ? (
+              <div className="p-20 text-center flex flex-col items-center gap-2 bg-white">
+                <Loader2 className="animate-spin text-primary" size={32} />
+                <p className="text-[10px] font-bold uppercase text-slate-400">Loading Terminal Data...</p>
               </div>
+            ) : filteredMatches.length > 0 ? (
+              filteredMatches.map((match: any) => (
+                <MatchRow key={match.id} match={match} />
+              ))
+            ) : (
+              <div className="p-20 text-center flex flex-col items-center gap-4 bg-white border-b border-slate-200">
+                <Database size={40} className="text-slate-200" />
+                <div className="space-y-1">
+                  <p className="text-sm font-black uppercase text-slate-400">No Matches Available</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    The terminal is connected but no matches met the filter criteria.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <div className="flex items-center gap-2 mb-3 px-1">
+               <ShieldCheck className="text-primary" size={16} />
+               <h3 className="text-xs font-black uppercase italic tracking-tight">Exchange Mini Games</h3>
             </div>
+            <GamesGrid />
           </div>
         </div>
 
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Data Connection: Paused
+            Data Connection: Sportradar v2 Secure
           </div>
         </footer>
       </main>

@@ -1,15 +1,45 @@
+
 'use client';
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useFirestore } from '@/firebase';
-import { clearAllMatchesAction } from '@/app/actions/sync-matches';
-import { Trash2, Loader2, Ban } from 'lucide-react';
+import { clearAllMatchesAction, syncCricketMatchesAction } from '@/app/actions/sync-matches';
+import { Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 export function SyncDataButton() {
   const [clearing, setClearing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const firestore = useFirestore();
+
+  const handleSync = async () => {
+    if (!firestore) return;
+    setSyncing(true);
+    try {
+      const result = await syncCricketMatchesAction(firestore);
+      if (result.success) {
+        toast({
+          title: "Network Synchronized",
+          description: `Fetched ${result.count || 0} real-world matches.`,
+        });
+      } else {
+        toast({
+          title: "Sync Error",
+          description: result.error || "Failed to fetch data.",
+          variant: "destructive"
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: "Network sync failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleClear = async () => {
     if (!firestore) return;
@@ -40,11 +70,16 @@ export function SyncDataButton() {
       <Button 
         variant="ghost" 
         size="sm" 
-        disabled={true}
-        className="h-7 text-[10px] font-black uppercase tracking-tighter bg-slate-200 text-slate-500 gap-1.5 cursor-not-allowed"
+        onClick={handleSync}
+        disabled={syncing}
+        className="h-7 text-[10px] font-black uppercase tracking-tighter bg-primary/20 hover:bg-primary/40 text-primary gap-1.5 border border-primary/30"
       >
-        <Ban className="w-3 h-3" />
-        <span>Sync Disabled</span>
+        {syncing ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <RefreshCw className="w-3 h-3" />
+        )}
+        <span>Sync Now</span>
       </Button>
 
       <Button 

@@ -1,19 +1,29 @@
+
 'use client';
 
-import { useFirestore, useUser } from '@/firebase';
+import { useFirestore, useUser, useCollection } from '@/firebase';
+import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { 
-  Trophy, Zap, ShieldCheck, ArrowRight, 
-  LogIn, Star, Database
+  Trophy, Zap, LogIn, Database
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { MatchCard } from '@/components/dashboard/MatchCard';
 
 export default function LandingPage() {
   const { user } = useUser();
+  const firestore = useFirestore();
 
-  const featuredMatches = []; // Disabled per user request
+  const matchesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'), limit(6));
+  }, [firestore]);
+  const { data: matches } = useCollection(matchesQuery);
+
+  const featuredMatches = matches || [];
 
   const heroPlaceholder = PlaceHolderImages.find(p => p.id === 'match-banner-1') || {
     imageUrl: 'https://picsum.photos/seed/cricket1/1200/600',
@@ -86,22 +96,30 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-20 text-center flex flex-col items-center gap-4">
-          <Database size={48} className="text-slate-200" />
-          <div className="space-y-2">
-            <p className="text-lg font-black uppercase text-slate-400">Terminal Offline</p>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-              Live match synchronization is currently disabled by the administrator.
-            </p>
+        {featuredMatches.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featuredMatches.map((match: any) => (
+              <MatchCard key={match.id} match={match} />
+            ))}
           </div>
-        </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-20 text-center flex flex-col items-center gap-4">
+            <Database size={48} className="text-slate-200" />
+            <div className="space-y-2">
+              <p className="text-lg font-black uppercase text-slate-400">Terminal Offline</p>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
+                Connecting to live network... please wait.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       <footer className="bg-white border-t border-slate-200 py-10">
         <div className="container mx-auto px-6 text-center space-y-4">
           <h2 className="text-2xl font-black italic tracking-tighter text-slate-300">CRICKETVUE</h2>
           <p className="text-[9px] text-slate-300 font-bold uppercase tracking-[0.3em] pt-4">
-            © 2025 CRICKETVUE EXCHANGE | SYSTEM MAINTENANCE
+            © 2025 CRICKETVUE EXCHANGE | SECURE DATA TERMINAL
           </p>
         </div>
       </footer>

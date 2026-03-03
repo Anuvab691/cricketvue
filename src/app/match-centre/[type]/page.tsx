@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams } from 'next/navigation';
@@ -5,11 +6,9 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
 import { doc, collection, query, orderBy } from 'firebase/firestore';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { Trophy, Zap, UserCircle, Loader2, PlayCircle, Database, RefreshCw, Globe } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Trophy, Zap, UserCircle, Loader2, Database, Globe } from 'lucide-react';
 import Link from 'next/link';
-import { format, parseISO, isToday, isAfter, startOfToday } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { MatchRow } from '@/components/dashboard/MatchRow';
 
 const CATEGORY_NAMES: Record<string, string> = {
   international: 'International Series',
@@ -30,9 +29,19 @@ export default function MatchCentrePage() {
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
 
-  // Background sync is REMOVED per user request
+  const matchesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
+  }, [firestore]);
+  const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
 
-  const filteredMatches = []; // Matches are filtered out to be empty per request
+  const filteredMatches = matches?.filter((m: any) => {
+    const series = (m.series || '').toLowerCase();
+    if (type === 't20') return series.includes('t20') || series.includes('ipl') || series.includes('bbl');
+    if (type === 'test') return series.includes('test');
+    if (type === 'odi') return series.includes('odi') || series.includes('one day');
+    return true;
+  }) || [];
 
   const title = CATEGORY_NAMES[type as string] || 'Match Centre';
 
@@ -50,7 +59,7 @@ export default function MatchCentrePage() {
           
           <div className="flex items-center gap-4">
             <div className="text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 text-white/50">
-              <Zap size={10} /> SYNC OFFLINE
+              <Zap size={10} /> NETWORK ACTIVE
             </div>
             <div className="flex items-center gap-2 text-xs font-bold">
               <span className="opacity-80">Balance:</span>
@@ -76,31 +85,35 @@ export default function MatchCentrePage() {
           </div>
         </nav>
 
-        <div className="exchange-sub-nav">
-          <div className="flex items-center gap-4 w-full">
-            <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} /> Information
-            </div>
-            <p className="text-[11px] text-slate-500 font-bold">The match terminal is currently in offline mode.</p>
-          </div>
-        </div>
-
         <div className="p-1 md:p-3">
           <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
             <div className="bg-[#2c3e50] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Trophy size={14} className="text-accent" /> {title} - Fixtures Unavailable
+                <Trophy size={14} className="text-accent" /> {title} - Live Fixtures
               </div>
             </div>
             
-            <div className="p-20 text-center flex flex-col items-center gap-4">
-              <Database size={40} className="text-slate-200" />
-              <div className="space-y-1">
-                <p className="text-sm font-black uppercase text-slate-400">No Data Available</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  Real-time match synchronization has been disabled.
-                </p>
-              </div>
+            <div className="divide-y divide-slate-100">
+              {matchesLoading ? (
+                <div className="p-20 text-center flex flex-col items-center gap-2">
+                  <Loader2 className="animate-spin text-primary" size={32} />
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Fetching Network Feed...</p>
+                </div>
+              ) : filteredMatches.length > 0 ? (
+                filteredMatches.map((match: any) => (
+                  <MatchRow key={match.id} match={match} />
+                ))
+              ) : (
+                <div className="p-20 text-center flex flex-col items-center gap-4">
+                  <Database size={40} className="text-slate-200" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-black uppercase text-slate-400">No Data Available</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      No matches currently fit this category in the live feed.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -108,7 +121,7 @@ export default function MatchCentrePage() {
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Data Connection: Paused
+            Professional Data Sync: Connected
           </div>
         </footer>
       </main>
