@@ -8,7 +8,6 @@ import { FirestorePermissionError } from '@/firebase/errors';
 /**
  * Syncs actual real-world cricket data into our Firestore matches collection.
  * This function processes raw API data into our internal Betting Match format.
- * Now processes ALL matches returned from the service without additional filtering.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -31,7 +30,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         status = 'live';
       }
 
-      // Format Score Array: "India 240/5 (45.2 ov) | Aus 10/0 (2 ov)"
+      // Format Score Array
       const scoreString = (m.score && m.score.length > 0)
         ? m.score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(' | ')
         : (status === 'live' ? 'Live - Score Updating...' : 'Scheduled');
@@ -41,6 +40,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         teamB: m.teams[1] || 'TBD',
         startTime: m.date,
         series: m.series || 'International Series',
+        matchType: m.matchType || 't20', // Crucial for filtering in Match Centre
         status: status,
         statusText: m.status,
         currentScore: scoreString,
@@ -64,7 +64,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
       
       // Initialize Default Markets if they are missing
       if (marketsSnap && marketsSnap.empty) {
-        // Standard Winner Market
         const winnerMarketRef = doc(marketsRef, 'match_winner');
         setDoc(winnerMarketRef, {
           type: 'match_winner',
@@ -75,7 +74,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
           ]
         });
 
-        // Instant Micro Markets (Next Ball) for Live Games
         if (status === 'live') {
           const nextBallRef = doc(marketsRef, 'next_ball');
           setDoc(nextBallRef, {
@@ -93,7 +91,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     await Promise.all(batchPromises);
 
-    // Global Sync Timestamp for UI synchronization
     const settingsRef = doc(db, 'app_settings', 'global');
     setDoc(settingsRef, { 
       lastGlobalSync: new Date().toISOString(),
