@@ -1,9 +1,10 @@
+
 'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Clock, MapPin, Calendar, CheckCircle2, Trophy, ArrowUpRight } from 'lucide-react';
+import { Clock, MapPin, Calendar, CheckCircle2, Trophy, ArrowUpRight, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 
@@ -14,6 +15,10 @@ export function MatchCard({ match }: { match: any }) {
   const matchDate = match.startTime ? parseISO(match.startTime) : null;
   const formattedDate = matchDate ? format(matchDate, 'MMM dd, yyyy') : 'TBD';
   const formattedTime = matchDate ? format(matchDate, 'HH:mm') : 'TBD';
+
+  // Display logic: Prioritize numeric currentScore over statusText
+  const hasLiveScore = match.currentScore && match.currentScore !== 'TBD';
+  const displayScore = hasLiveScore ? match.currentScore : match.statusText;
 
   return (
     <Card className="glass-card overflow-hidden group hover:border-primary/50 transition-all duration-300 relative">
@@ -26,9 +31,8 @@ export function MatchCard({ match }: { match: any }) {
             </span>
           </div>
           {isLive && (
-            <span className="text-[9px] font-bold text-primary animate-pulse flex items-center gap-1">
-              <span className="w-1 h-1 bg-primary rounded-full" />
-              WEB LIVE
+            <span className="text-[9px] font-black text-primary animate-pulse flex items-center gap-1 uppercase tracking-tighter">
+              <Zap className="w-3 h-3 fill-primary" /> LIVE FEED
             </span>
           )}
         </div>
@@ -36,12 +40,12 @@ export function MatchCard({ match }: { match: any }) {
           <div className="flex justify-between items-center mb-6">
             {isLive ? (
               <Badge variant="destructive" className="animate-pulse px-3 py-1 text-xs font-bold uppercase tracking-wider">
-                Live
+                In-Play
               </Badge>
             ) : isFinished ? (
               <Badge variant="secondary" className="px-3 py-1 text-xs font-bold uppercase tracking-wider bg-green-500/20 text-green-500 border-green-500/30">
                 <CheckCircle2 className="w-3 h-3 mr-1 inline" />
-                Final
+                Final Result
               </Badge>
             ) : (
               <div className="flex flex-col gap-1">
@@ -63,21 +67,21 @@ export function MatchCard({ match }: { match: any }) {
 
           <div className="flex justify-between items-center mb-6">
             <div className="text-center flex-1">
-              <p className="text-lg font-bold mb-1 leading-tight">{match.teamA}</p>
+              <p className="text-lg font-black uppercase italic tracking-tighter leading-tight">{match.teamA}</p>
             </div>
             <div className="px-4 text-primary/40 font-black italic text-xs">VS</div>
             <div className="text-center flex-1">
-              <p className="text-lg font-bold mb-1 leading-tight">{match.teamB}</p>
+              <p className="text-lg font-black uppercase italic tracking-tighter leading-tight">{match.teamB}</p>
             </div>
           </div>
 
-          {(match.currentScore || (isFinished && match.statusText)) && (
-            <div className="mb-6 p-3 bg-secondary/30 rounded-xl text-center border border-white/5">
-              <p className="text-[11px] font-mono text-accent font-bold leading-relaxed mb-1">
-                {match.currentScore && match.currentScore !== 'TBD' ? match.currentScore : match.statusText}
+          {displayScore && (
+            <div className="mb-6 p-3 bg-secondary/10 rounded-sm text-center border border-white/5">
+              <p className="text-sm font-mono text-accent font-black leading-relaxed">
+                {displayScore}
               </p>
-              {match.statusText && (
-                <p className="text-[10px] text-muted-foreground italic mt-1 border-t border-white/5 pt-1">
+              {hasLiveScore && match.statusText && match.statusText !== displayScore && (
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1.5 opacity-60">
                   {match.statusText}
                 </p>
               )}
@@ -85,8 +89,8 @@ export function MatchCard({ match }: { match: any }) {
           )}
 
           <Link href={`/match/${match.id}`}>
-            <Button className="w-full bg-primary hover:bg-primary/90 rounded-xl py-5 font-bold text-sm group-hover:scale-[1.01] transition-transform gap-2">
-              {isFinished ? 'View Final Result' : 'View Live Markets'}
+            <Button className="w-full bg-primary hover:bg-primary/90 rounded-sm py-5 font-black text-xs uppercase italic tracking-widest group-hover:scale-[1.01] transition-transform gap-2">
+              {isFinished ? 'View Statistics' : 'Open Markets'}
               <ArrowUpRight className="w-4 h-4" />
             </Button>
           </Link>

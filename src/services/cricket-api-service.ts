@@ -105,19 +105,26 @@ function transformSportradarMatch(summary: any): ExternalMatch {
   const homeTeamObj = competitors.find((c: any) => c.qualifier === 'home') || competitors[0];
   const awayTeamObj = competitors.find((c: any) => c.qualifier === 'away') || competitors[1];
 
-  const homeName = homeTeamObj?.name || 'Team A';
-  const awayName = awayTeamObj?.name || 'Team B';
+  const homeName = homeTeamObj?.name || 'TBA';
+  const awayName = awayTeamObj?.name || 'TBA';
 
-  const matchStatus = sport_event_status?.match_status || 'not_started';
+  const rawStatus = (sport_event_status?.status || 'not_started').toLowerCase();
+  const matchEnded = ['ended', 'closed', 'complete', 'finished'].includes(rawStatus);
+  const matchStarted = !['not_started', 'postponed', 'cancelled'].includes(rawStatus);
+
+  // Map to internal status
+  let status: string = 'upcoming';
+  if (matchEnded) status = 'finished';
+  else if (matchStarted || rawStatus === 'live' || rawStatus === 'started') status = 'live';
 
   // Parse probabilities if available
   let probabilities;
   if (sport_event_probabilities?.markets) {
-    const winnerMarket = sport_event_probabilities.markets.find((m: any) => m.type === 'match_winner');
+    const winnerMarket = sport_event_probabilities.markets.find((m: any) => m.type === 'match_winner' || m.name === 'Match Winner');
     if (winnerMarket) {
       probabilities = {
-        home: winnerMarket.outcomes.find((o: any) => o.name === 'home')?.probability || 50,
-        away: winnerMarket.outcomes.find((o: any) => o.name === 'away')?.probability || 50,
+        home: winnerMarket.outcomes.find((o: any) => o.name === 'home' || o.id?.includes('home'))?.probability || 50,
+        away: winnerMarket.outcomes.find((o: any) => o.name === 'away' || o.id?.includes('away'))?.probability || 50,
         draw: winnerMarket.outcomes.find((o: any) => o.name === 'draw')?.probability
       };
     }
@@ -127,25 +134,55 @@ function transformSportradarMatch(summary: any): ExternalMatch {
     id: sport_event.id,
     name: `${homeName} vs ${awayName}`,
     matchType: normalizeMatchType(sport_event.sport_event_context?.competition?.name || ''),
-    status: matchStatus,
+    status,
     venue: sport_event.venue?.name || 'Global Stadium',
     date: sport_event.start_time,
     series: sport_event.sport_event_context?.competition?.name || 'International Series',
     teams: [homeName, awayName],
     score: parseSportradarScore(sport_event_status, homeName, awayName),
-    matchStarted: !['not_started', 'postponed', 'cancelled'].includes(matchStatus),
-    matchEnded: ['ended', 'closed', 'complete'].includes(matchStatus),
-    rawStatusText: sport_event_status?.display_status || matchStatus,
+    matchStarted,
+    matchEnded,
+    rawStatusText: sport_event_status?.display_status || rawStatus,
     probabilities
   };
 }
 
+/**
+ * Robust parsing for cricket scores from Sportradar status object.
+ */
 function parseSportradarScore(status: any, homeName: string, awayName: string) {
   if (!status) return undefined;
   const scores: any[] = [];
-  if (status.home_score?.display_score) scores.push({ inning: homeName, r: status.home_score.display_score });
-  if (status.away_score?.display_score) scores.push({ inning: awayName, r: status.away_score.display_score });
-  if (scores.length === 0 && status.display_score) scores.push({ inning: 'Match', r: status.display_score });
+
+  // 1. Try Home Score
+  if (status.home_score) {
+    let homeText = "";
+    if (status.home_score.display_score) {
+      homeText = status.home_score.display_score;
+    } else if (status.home_score.runs !== undefined) {
+      homeText = `${status.home_score.runs}/${status.home_score.wickets || 0}`;
+      if (status.home_score.overs) homeText += ` (${status.home_score.overs} ov)`;
+    }
+    if (homeText) scores.push({ inning: homeName, r: homeText });
+  }
+
+  // 2. Try Away Score
+  if (status.away_score) {
+    let awayText = "";
+    if (status.away_score.display_score) {
+      awayText = status.away_score.display_score;
+    } else if (status.away_score.runs !== undefined) {
+      awayText = `${status.away_score.runs}/${status.away_score.wickets || 0}`;
+      if (status.away_score.overs) awayText += ` (${status.away_score.overs} ov)`;
+    }
+    if (awayText) scores.push({ inning: awayName, r: awayText });
+  }
+
+  // 3. Fallback to general display score
+  if (scores.length === 0 && status.display_score) {
+    scores.push({ inning: 'Score', r: status.display_score });
+  }
+
   return scores.length > 0 ? scores : undefined;
 }
 

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc, query, where, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 import { fetchLiveMatches } from '@/services/cricket-api-service';
 
 /**
@@ -18,7 +18,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: false, reason: 'clearing' };
     }
 
-    console.log("[Sync] Fetching live summaries from Sportradar...");
+    console.log("[Sync] Fetching fresh live data from Sportradar...");
     const externalMatches = await fetchLiveMatches();
 
     if (!externalMatches || externalMatches.length === 0) {
@@ -27,9 +27,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: true, count: 0 };
     }
 
-    // Filter out placeholders
+    // Filter out placeholders and Team A/B generic names
     const validMatches = externalMatches.filter(m => 
-      !m.teams.some(t => t.toLowerCase().includes('team a') || t.toLowerCase().includes('team b'))
+      m.teams && 
+      !m.teams.some(t => 
+        t.toLowerCase().includes('team a') || 
+        t.toLowerCase().includes('team b') || 
+        t.toLowerCase() === 'tba'
+      )
     );
 
     const batch = writeBatch(db);
@@ -38,31 +43,29 @@ export async function syncCricketMatchesAction(db: Firestore) {
     for (const match of validMatches) {
       const matchRef = doc(db, 'matches', match.id);
       
-      // Calculate Back/Lay Odds from Probabilities
-      // Default to 50/50 if not provided
       const probHome = match.probabilities?.home || 50;
       const probAway = match.probabilities?.away || 50;
 
-      // Odds = 100 / Probability
-      // Back = Odds * 0.98 (margin)
-      // Lay = Odds * 1.02 (spread)
       const homeBack = Math.max(1.01, (100 / probHome) * 0.98);
       const homeLay = Math.max(1.02, (100 / probHome) * 1.02);
       const awayBack = Math.max(1.01, (100 / probAway) * 0.98);
       const awayLay = Math.max(1.02, (100 / probAway) * 1.02);
 
-      // Basic match data
+      // Construct accurate score string
+      const scoreStr = match.score 
+        ? match.score.map(s => `${s.inning}: ${s.r}`).join(' | ') 
+        : 'TBD';
+
       const matchData = {
         teamA: match.teams[0] || 'TBA',
         teamB: match.teams[1] || 'TBA',
         startTime: match.date,
-        status: match.matchEnded ? 'finished' : (match.matchStarted ? 'live' : 'upcoming'),
-        statusText: match.rawStatusText || '',
-        currentScore: match.score ? match.score.map(s => `${s.inning}: ${s.r}`).join(' | ') : 'TBD',
+        status: match.status,
+        statusText: match.rawStatusText || 'Live',
+        currentScore: scoreStr,
         venue: match.venue,
         series: match.series || 'International Series',
         lastUpdated: new Date().toISOString(),
-        // Add top-level odds for fast dashboard rendering
         odds: {
           home: { back: homeBack, lay: homeLay },
           away: { back: awayBack, lay: awayLay }
@@ -124,7 +127,7 @@ export async function clearAllMatchesAction(db: Firestore) {
         return { success: true, count: 0 };
     }
     
-    // Delete matches and their subcollections
+    // Batch delete matches and their subcollections
     for (const docSnap of snapshot.docs) {
       const marketsRef = collection(db, 'matches', docSnap.id, 'markets');
       const marketsSnap = await getDocs(marketsRef);
