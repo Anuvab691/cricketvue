@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useFirestore } from '@/firebase';
 import { syncCricketMatchesAction, clearAllMatchesAction } from '@/app/actions/sync-matches';
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { RefreshCw, Trash2, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 /**
@@ -32,7 +32,7 @@ export function SyncDataButton() {
       } else {
         toast({
           title: "Sync Failed",
-          description: result.error || "Check your API key in the .env file.",
+          description: result.error || "Verify your API key in the configuration.",
           variant: "destructive",
         });
       }
@@ -87,11 +87,11 @@ export function SyncDataButton() {
         className="h-7 text-[10px] font-black uppercase tracking-tighter bg-white/10 hover:bg-white/20 text-white gap-1.5"
       >
         {loading ? (
-          <RefreshCw className="w-3 h-3 animate-spin" />
+          <Loader2 className="w-3 h-3 animate-spin" />
         ) : (
           <RefreshCw className="w-3 h-3" />
         )}
-        <span>Refresh Web</span>
+        <span>Sync Now</span>
       </Button>
 
       <Button 
@@ -102,11 +102,11 @@ export function SyncDataButton() {
         className="h-7 text-[10px] font-black uppercase tracking-tighter bg-red-500/20 hover:bg-red-500/40 text-red-200 gap-1.5 border border-red-500/30"
       >
         {clearing ? (
-          <RefreshCw className="w-3 h-3 animate-spin" />
+          <Loader2 className="w-3 h-3 animate-spin" />
         ) : (
           <Trash2 className="w-3 h-3" />
         )}
-        <span>Clear Terminal</span>
+        <span>Clear All</span>
       </Button>
     </div>
   );

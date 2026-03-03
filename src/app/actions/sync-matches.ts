@@ -1,6 +1,7 @@
+
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs, writeBatch, deleteDoc, query, limit } from 'firebase/firestore';
 import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/cricket-api-service';
 
 /**
@@ -8,13 +9,16 @@ import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
+    // 1. Check for API key presence (client-side check via a dummy fetch or env check if possible)
+    // Note: Since this is 'use client', process.env.CRICKET_API_KEY might be undefined 
+    // unless prefixed with NEXT_PUBLIC_. However, the service handles the check.
+    
     const datesToSync = [0, 1, 2].map(offset => {
       const d = new Date();
       d.setDate(d.getDate() + offset);
       return d.toISOString().split('T')[0];
     });
 
-    // Attempt to fetch data
     const results = await Promise.allSettled([
       fetchLiveMatches(),
       ...datesToSync.map(date => fetchDailySchedule(date))
@@ -45,7 +49,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     const apiMatchIds = new Set(validMatches.map(m => m.id.replace(/:/g, '_')));
 
-    // CLEANUP: Always check for existing matches that are no longer in the active Sportradar feed
+    // CLEANUP STALE DATA: Always check for existing matches that are no longer in the active Sportradar feed
     const matchesRef = collection(db, 'matches');
     const existingSnap = await getDocs(matchesRef);
     const deleteBatch = writeBatch(db);
@@ -65,13 +69,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
       await deleteBatch.commit();
     }
     
-    // If no real matches are found in the feed (or API is disconnected), we report success with 0 count
     if (validMatches.length === 0) {
       await updateSyncStatus(db, 'success', 0, deletedCount);
       return { success: true, count: 0, deleted: deletedCount };
     }
 
-    // UPDATE/CREATE
+    // UPDATE/CREATE MATCHES
     for (const m of validMatches) {
       const safeId = m.id.replace(/:/g, '_');
       const matchRef = doc(db, 'matches', safeId);
@@ -98,7 +101,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         lastUpdated: new Date().toISOString()
       }, { merge: true });
 
-      // Init basic market
+      // Initialize match_winner market
       const marketsRef = collection(db, 'matches', safeId, 'markets');
       const winnerMarketRef = doc(marketsRef, 'match_winner');
       await setDoc(winnerMarketRef, {
@@ -133,12 +136,21 @@ async function updateSyncStatus(db: Firestore, status: 'success' | 'error', coun
 
 export async function clearAllMatchesAction(db: Firestore) {
   try {
+    // Reset sync status first to stop background re-population during clear
+    const settingsRef = doc(db, 'app_settings', 'global');
+    await setDoc(settingsRef, { 
+      activeMatchesCount: 0,
+      syncStatus: 'clearing',
+      lastGlobalSync: null
+    }, { merge: true });
+
     const matchesRef = collection(db, 'matches');
     const snapshot = await getDocs(matchesRef);
-    if (snapshot.empty) return { success: true, count: 0 };
+    if (snapshot.empty) {
+        await setDoc(settingsRef, { syncStatus: 'idle' }, { merge: true });
+        return { success: true, count: 0 };
+    }
     
-    // Firestore batch limit is 500, but we likely have few matches
-    // To be safe, we just process all in one batch for this prototype
     const batch = writeBatch(db);
     snapshot.docs.forEach(docSnap => {
       batch.delete(docSnap.ref);
@@ -146,11 +158,8 @@ export async function clearAllMatchesAction(db: Firestore) {
     
     await batch.commit();
     
-    // Also reset sync status
-    const settingsRef = doc(db, 'app_settings', 'global');
     await setDoc(settingsRef, { 
       activeMatchesCount: 0,
-      lastGlobalSync: null,
       syncStatus: 'idle'
     }, { merge: true });
 
