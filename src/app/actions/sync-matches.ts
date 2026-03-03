@@ -16,6 +16,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const data = settingsSnap.data();
       if (data.syncStatus === 'clearing') return { success: false, reason: 'clearing' };
       const lastSync = data.lastGlobalSync ? new Date(data.lastGlobalSync).getTime() : 0;
+      // Skip if sync happened in the last 10 seconds to avoid spamming API
       if (Date.now() - lastSync < 10000) return { success: true, reason: 'recent' };
     }
 
@@ -32,28 +33,55 @@ export async function syncCricketMatchesAction(db: Firestore) {
       fetchCompetitions(),
       ...dates.map(date => fetchDailySchedule(date))
     ]);
+
+    const combinedMatches = [...(liveMatches || []), ...scheduleResults.flat().filter(Boolean)];
     
-    // Sync Tournaments
+    // 1. Sync Tournaments
+    // We combine the master competitions list with tournaments extracted from live matches
     const tournamentBatch = writeBatch(db);
-    const majorTournaments = (competitions || []).filter(c => 
-      c.name.toLowerCase().includes('icc') || 
-      c.name.toLowerCase().includes('t20') || 
-      c.name.toLowerCase().includes('ipl') ||
-      c.name.toLowerCase().includes('big bash') ||
-      c.name.toLowerCase().includes('asia cup')
+    const tournamentMap = new Map();
+
+    // Add tournaments from the master competitions list
+    (competitions || []).forEach(c => {
+      tournamentMap.set(c.id, {
+        id: c.id,
+        name: c.name,
+        category: c.category || 'International',
+        gender: c.gender || 'men',
+        type: c.type || 'league'
+      });
+    });
+
+    // Extract tournaments from live/scheduled matches (most reliable for "active" status)
+    combinedMatches.forEach(m => {
+      if (m.seriesId && m.series && !tournamentMap.has(m.seriesId)) {
+        tournamentMap.set(m.seriesId, {
+          id: m.seriesId,
+          name: m.series,
+          category: 'Active Series',
+          gender: 'men',
+          type: 'league'
+        });
+      }
+    });
+
+    // Broad filter for major tournaments
+    const majorKeywords = ['icc', 't20', 'ipl', 'big bash', 'bbl', 'asia cup', 'world cup', 'test', 'odi', 'trophy', 'series', 'shield', 'premiere'];
+    const filteredTournaments = Array.from(tournamentMap.values()).filter(t => 
+      majorKeywords.some(key => t.name.toLowerCase().includes(key))
     );
 
-    majorTournaments.forEach(t => {
+    filteredTournaments.forEach(t => {
       const tRef = doc(db, 'tournaments', t.id);
       tournamentBatch.set(tRef, { ...t, lastUpdated: new Date().toISOString() }, { merge: true });
     });
     await tournamentBatch.commit();
 
-    // Sync Matches
-    const combined = [...(liveMatches || []), ...scheduleResults.flat().filter(Boolean)];
+    // 2. Sync Matches
     const matchMap = new Map();
-    combined.forEach(m => { if (m?.id) matchMap.set(m.id, m); });
+    combinedMatches.forEach(m => { if (m?.id) matchMap.set(m.id, m); });
     
+    // Filter out generic "Team A/B" entries typical of restricted API keys
     const validMatches = Array.from(matchMap.values()).filter(m => 
       m.teams && !m.teams.some(t => t.toLowerCase().includes('team a') || t.toLowerCase().includes('team b'))
     );
@@ -74,6 +102,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         statusText: match.rawStatusText || 'Live',
         venue: match.venue,
         series: match.series || 'International Series',
+        seriesId: match.seriesId || '',
         lastUpdated: new Date().toISOString(),
         odds: {
           home: { back: Math.max(1.01, (100 / probHome) * 0.98), lay: Math.max(1.02, (100 / probHome) * 1.02) },
@@ -88,6 +117,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       batch.set(matchRef, matchData, { merge: true });
       updatedCount++;
 
+      // Initialize the match winner market for betting
       const marketRef = doc(collection(db, 'matches', match.id, 'markets'), 'match_winner');
       batch.set(marketRef, {
         id: 'match_winner',
@@ -107,7 +137,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       syncStatus: 'success'
     }, { merge: true });
 
-    return { success: true, count: updatedCount };
+    return { success: true, count: updatedCount, tournamentsCount: filteredTournaments.length };
   } catch (error: any) {
     console.error("Sync Error:", error);
     return { success: false, error: error.message };
@@ -123,7 +153,7 @@ export async function clearAllMatchesAction(db: Firestore) {
     for (const col of collections) {
       const snap = await getDocs(collection(db, col));
       for (const docSnap of snap.docs) {
-        const subCol = col === 'matches' ? 'markets' : 'markets';
+        const subCol = 'markets';
         const subSnap = await getDocs(collection(db, col, docSnap.id, subCol));
         const b = writeBatch(db);
         subSnap.docs.forEach(d => b.delete(d.ref));

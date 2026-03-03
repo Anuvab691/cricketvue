@@ -2,18 +2,22 @@
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
-import { collection, query, doc } from 'firebase/firestore';
+import { collection, query, doc, orderBy } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { Loader2, Star, UserCircle, Globe, Trophy, ArrowRight } from 'lucide-react';
+import { Loader2, Star, UserCircle, Globe, Trophy, ArrowRight, RefreshCw } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
 
 export default function TournamentsPage() {
   const firestore = useFirestore();
   const { user } = useUser();
+  const [isSyncing, setIsSyncing] = useState(false);
+  
   const effectiveUserId = user?.uid || 'guest';
 
   const userRef = useMemoFirebase(() => {
@@ -24,9 +28,29 @@ export default function TournamentsPage() {
 
   const tournamentsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'tournaments'));
+    return query(collection(firestore, 'tournaments'), orderBy('name', 'asc'));
   }, [firestore]);
   const { data: tournaments, loading } = useCollection(tournamentsQuery);
+
+  const handleManualSync = async () => {
+    if (!firestore) return;
+    setIsSyncing(true);
+    const result = await syncCricketMatchesAction(firestore);
+    setIsSyncing(false);
+    
+    if (result.success) {
+      toast({ 
+        title: "Sync Complete", 
+        description: `Identified ${result.tournamentsCount || 0} active tournaments from the feed.` 
+      });
+    } else {
+      toast({ 
+        title: "Sync Error", 
+        description: result.error || "Could not fetch tournament data.",
+        variant: "destructive"
+      });
+    }
+  };
 
   useEffect(() => {
     if (firestore) syncCricketMatchesAction(firestore);
@@ -65,9 +89,20 @@ export default function TournamentsPage() {
         </nav>
 
         <div className="p-3 max-w-5xl mx-auto w-full">
-          <div className="mb-8 mt-4">
-            <h2 className="text-4xl font-black italic tracking-tighter uppercase mb-2">Tournament Hub</h2>
-            <p className="text-slate-500 text-sm font-medium">Place long-term stakes on outright winners of major cricket series and leagues.</p>
+          <div className="mb-8 mt-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="space-y-1">
+              <h2 className="text-4xl font-black italic tracking-tighter uppercase mb-2">Tournament Hub</h2>
+              <p className="text-slate-500 text-sm font-medium">Place long-term stakes on outright winners of major cricket series and leagues.</p>
+            </div>
+            <Button 
+              onClick={handleManualSync} 
+              disabled={isSyncing}
+              variant="outline"
+              className="bg-white border-slate-200 text-[10px] font-black uppercase italic tracking-tighter h-9 gap-2 shadow-sm hover:bg-slate-50"
+            >
+              <RefreshCw className={isSyncing ? "animate-spin w-3 h-3" : "w-3 h-3"} />
+              Refresh Network
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -88,7 +123,7 @@ export default function TournamentsPage() {
                       <Star size={16} className="text-yellow-400 fill-yellow-400" />
                     </div>
                     <h3 className="text-xl font-black italic tracking-tighter uppercase text-slate-800 mb-1 leading-tight">{t.name}</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">{t.gender}'s {t.type}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">{t.gender || 'men'}'s {t.type || 'league'}</p>
                     
                     <div className="flex items-center justify-between pt-4 border-t border-slate-50">
                       <span className="text-[10px] font-black uppercase text-primary">Outright Winner Available</span>
@@ -100,10 +135,15 @@ export default function TournamentsPage() {
                 </Link>
               ))
             ) : (
-              <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-200 rounded-lg">
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-200 rounded-lg bg-white/50">
                 <Globe size={40} className="mx-auto text-slate-200 mb-4" />
                 <p className="text-sm font-black uppercase text-slate-400">No Active Tournaments Found</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase">The terminal is currently scanning for major series.</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mb-6">
+                  Click 'Refresh Network' above to scan for current professional series.
+                </p>
+                <Button onClick={handleManualSync} disabled={isSyncing} className="bg-primary hover:bg-primary/90 text-xs font-black uppercase">
+                   Scan for Tournaments
+                </Button>
               </div>
             )}
           </div>

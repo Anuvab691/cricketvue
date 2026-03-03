@@ -14,6 +14,7 @@ export interface ExternalMatch {
   venue: string;
   date: string;
   series?: string;
+  seriesId?: string; // Added to track competition association
   teams: string[];
   score?: Array<{
     r: string;
@@ -46,7 +47,8 @@ const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
 async function fetchFromSportradar(endpoint: string) {
   const apiKey = process.env.CRICKET_API_KEY;
   if (!apiKey || apiKey === 'YOUR_API_KEY_HERE' || apiKey === '') {
-    throw new Error("API KEY ERROR: Please add your Sportradar API Key to the environment variables.");
+    // Return empty instead of crashing if key is missing during initialization
+    return null;
   }
 
   const cleanEndpoint = endpoint.replace(/^\//, '');
@@ -60,7 +62,8 @@ async function fetchFromSportradar(endpoint: string) {
     });
     
     if (response.status === 401 || response.status === 403) {
-      throw new Error("API AUTH ERROR: Invalid or expired API Key.");
+      console.warn("API AUTH ERROR: Invalid or expired API Key.");
+      return null;
     }
 
     if (!response.ok) {
@@ -70,7 +73,7 @@ async function fetchFromSportradar(endpoint: string) {
     return await response.json();
   } catch (error: any) {
     console.error(`Sportradar Fetch Error [${endpoint}]:`, error.message);
-    throw error;
+    return null;
   }
 }
 
@@ -81,7 +84,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     return json.summaries.map(transformSportradarMatch);
   } catch (e) {
     console.error("fetchLiveMatches failed:", e);
-    throw e;
+    return [];
   }
 }
 
@@ -93,7 +96,7 @@ export async function fetchDailySchedule(dateString?: string): Promise<ExternalM
     return json.summaries.map(transformSportradarMatch);
   } catch (e) {
     console.error(`fetchDailySchedule failed for ${date}:`, e);
-    throw e;
+    return [];
   }
 }
 
@@ -114,7 +117,7 @@ export async function fetchCompetitions(): Promise<ExternalTournament[]> {
     }));
   } catch (e) {
     console.error("fetchCompetitions failed:", e);
-    throw e;
+    return [];
   }
 }
 
@@ -147,14 +150,17 @@ function transformSportradarMatch(summary: any): ExternalMatch {
     }
   }
   
+  const competition = sport_event.sport_event_context?.competition;
+
   return {
     id: sport_event.id,
     name: `${homeName} vs ${awayName}`,
-    matchType: seriesToType(sport_event.sport_event_context?.competition?.name || ''),
+    matchType: seriesToType(competition?.name || ''),
     status,
     venue: sport_event.venue?.name || 'Global Stadium',
     date: sport_event.start_time,
-    series: sport_event.sport_event_context?.competition?.name || 'International Series',
+    series: competition?.name || 'International Series',
+    seriesId: competition?.id,
     teams: [homeName, awayName],
     score: parseSportradarScore(sport_event_status, homeName, awayName),
     matchStarted,
