@@ -65,9 +65,17 @@ export default function Dashboard() {
   const baseActiveMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
-    // Show live, upcoming, or matches that finished today
+    
+    // Rule: Remove matches from the past (anything before today)
+    // We show matches if they are today OR starting in the future
+    const isRelevantDate = isToday(matchTime) || isAfter(matchTime, todayStart);
+    
+    if (!isRelevantDate) return false;
+
+    // Additionally, if it's finished, only show if it finished today
     if (m.status === 'finished' && !isToday(matchTime)) return false;
-    return isToday(matchTime) || isAfter(matchTime, todayStart);
+
+    return true;
   });
 
   // Navigation Filter Logic

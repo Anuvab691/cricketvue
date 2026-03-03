@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useFirestore, useCollection, useUser } from '@/firebase';
@@ -14,23 +13,19 @@ import { Button } from '@/components/ui/button';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { MatchRow } from '@/components/dashboard/MatchRow';
 import { parseISO, isToday, isAfter, startOfToday } from 'date-fns';
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function LandingPage() {
   const firestore = useFirestore();
-  const { user, loading: authLoading } = useUser();
+  const { user } = useUser();
   const router = useRouter();
-
-  // If user is already logged in, we can optionally redirect them to dashboard
-  // but usually a home page exists for public. Let's keep it for guest viewing.
 
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, 'matches'), 
       orderBy('startTime', 'asc'),
-      limit(5)
+      limit(20)
     );
   }, [firestore]);
 
@@ -40,8 +35,15 @@ export default function LandingPage() {
   const featuredMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
-    return isToday(matchTime) || isAfter(matchTime, todayStart);
-  });
+    
+    // Filter out past matches
+    const isRelevant = isToday(matchTime) || isAfter(matchTime, todayStart);
+    if (!isRelevant) return false;
+    
+    if (m.status === 'finished' && !isToday(matchTime)) return false;
+
+    return true;
+  }).slice(0, 5); // Just show top 5
 
   const heroPlaceholder = PlaceHolderImages.find(p => p.id === 'match-banner-1') || {
     imageUrl: 'https://picsum.photos/seed/cricket1/1200/600',

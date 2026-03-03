@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams } from 'next/navigation';
@@ -9,7 +8,7 @@ import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { Trophy, Zap, UserCircle, Loader2, PlayCircle, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isToday, isAfter, startOfToday } from 'date-fns';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 
 const CATEGORY_NAMES: Record<string, string> = {
@@ -31,18 +30,30 @@ export default function MatchCentrePage() {
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
 
-  // We query all matches and filter in memory or via query if possible
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'matches'), orderBy('startTime', 'desc'));
+    return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
   }, [firestore]);
 
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
 
+  const todayStart = startOfToday();
   const filteredMatches = (matches || []).filter(m => {
+    // Category Filter
     const category = (type as string).toLowerCase();
-    if (category === 'international') return true; // View all
-    return m.matchType === category;
+    const matchesCategory = category === 'international' || m.matchType === category;
+    if (!matchesCategory) return false;
+
+    // Past Matches Filter
+    if (!m.startTime) return false;
+    const matchTime = parseISO(m.startTime);
+    const isCurrentOrFuture = isToday(matchTime) || isAfter(matchTime, todayStart);
+    if (!isCurrentOrFuture) return false;
+
+    // Status Check for Finished matches
+    if (m.status === 'finished' && !isToday(matchTime)) return false;
+
+    return true;
   });
 
   const title = CATEGORY_NAMES[type as string] || 'Match Centre';
@@ -162,7 +173,7 @@ export default function MatchCentrePage() {
                         <div className="space-y-1">
                           <p className="text-sm font-black uppercase text-slate-400">No {title} Data</p>
                           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Sync your terminal to fetch the latest global cricket fixtures.
+                            Sync your terminal to fetch the latest global cricket fixtures for today.
                           </p>
                         </div>
                       </td>
