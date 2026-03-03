@@ -6,8 +6,8 @@ import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/
 
 /**
  * Syncs actual real-world cricket data from Sportradar into our Firestore matches collection.
- * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed.
- * Fetches a 3-day window (Today, Tomorrow, Day After) to ensure upcoming matches are visible.
+ * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed
+ * or are identified as generic placeholder data (e.g., "Team A", "TBA").
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -34,14 +34,20 @@ export async function syncCricketMatchesAction(db: Firestore) {
     
     const allMatches = Array.from(matchMap.values());
 
-    // 4. Filter out matches with generic/masked names "Team A" or "Team B" 
+    // 4. Filter out matches with generic/masked names or placeholder IDs
     const validMatches = allMatches.filter(m => {
-      const t1 = (m.teams[0] || '').toLowerCase();
-      const t2 = (m.teams[1] || '').toLowerCase();
+      const t1 = (m.teams[0] || '').toLowerCase().trim();
+      const t2 = (m.teams[1] || '').toLowerCase().trim();
+      
       const isGeneric = 
         t1.includes('team a') || t1.includes('team b') || 
         t2.includes('team a') || t2.includes('team b') ||
-        t1 === 'tba' || t2 === 'tba';
+        t1.includes('team 1') || t1.includes('team 2') ||
+        t2.includes('team 1') || t2.includes('team 2') ||
+        t1 === 'tba' || t2 === 'tba' ||
+        t1 === 'to be announced' || t2 === 'to be announced' ||
+        t1 === 'placeholder' || t2 === 'placeholder';
+        
       return !isGeneric;
     });
 
@@ -55,7 +61,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     existingSnap.forEach((docSnap) => {
       const data = docSnap.data();
-      // Only delete if it's from Sportradar and not in the current 3-day API set
+      // Only delete if it's from Sportradar and not in the current 3-day VALID API set
       if (data.source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
         deleteBatch.delete(docSnap.ref);
         deletedCount++;
@@ -67,7 +73,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     }
     
     if (validMatches.length === 0) {
-      updateSyncStatus(db, 'success', 0, deletedCount);
+      await updateSyncStatus(db, 'success', 0, deletedCount);
       return { success: true, count: 0, deleted: deletedCount };
     }
 
@@ -122,11 +128,11 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     await Promise.all(batchPromises);
 
-    updateSyncStatus(db, 'success', validMatches.length, deletedCount);
+    await updateSyncStatus(db, 'success', validMatches.length, deletedCount);
     return { success: true, count: validMatches.length, deleted: deletedCount };
   } catch (error: any) {
     console.error("Sync Internal Failure:", error);
-    updateSyncStatus(db, 'error', 0, 0, error.message);
+    await updateSyncStatus(db, 'error', 0, 0, error.message);
     return { error: error.message };
   }
 }
