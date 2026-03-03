@@ -8,6 +8,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 /**
  * Syncs actual real-world cricket data into our Firestore matches collection.
  * This function processes raw API data into our internal Betting Match format.
+ * Now processes ALL matches returned from the service without additional filtering.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {

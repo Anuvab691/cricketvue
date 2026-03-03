@@ -33,10 +33,11 @@ const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
 
 /**
  * Fetches current real-world matches from the configured API provider.
+ * Returns ALL matches provided by the 'currentMatches' endpoint.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
-    if (!CRICKET_API_KEY || CRICKET_API_KEY === 'YOUR_API_KEY_HERE') {
+    if (!CRICKET_API_KEY || CRICKET_API_KEY === 'YOUR_API_KEY_HERE' || CRICKET_API_KEY === '') {
       console.warn("Cricket API Key is missing or invalid. Please check your .env file.");
       return [];
     }
@@ -55,26 +56,20 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       return [];
     }
 
-    // Process and normalize the data
-    return json.data
-      .filter((m: any) => {
-        const series = (m.series || '').toLowerCase();
-        // Keep professional/international focus
-        return !series.includes('minor') && !series.includes('test-only');
-      })
-      .map((m: any) => ({
-        id: m.id || `match-${Math.random().toString(36).substr(2, 9)}`,
-        name: m.name || 'International Match',
-        matchType: m.matchType || 't20',
-        status: m.status || 'Scheduled',
-        venue: m.venue || 'Global Stadium',
-        date: m.dateTimeGMT || m.date || new Date().toISOString(),
-        series: m.series || 'International Series',
-        teams: m.teams || ['Team A', 'Team B'],
-        score: m.score || [],
-        matchStarted: m.matchStarted || false,
-        matchEnded: m.matchEnded || false
-      }));
+    // Process and normalize the data without filtering out series
+    return json.data.map((m: any) => ({
+      id: m.id || `match-${Math.random().toString(36).substr(2, 9)}`,
+      name: m.name || 'International Match',
+      matchType: m.matchType || 't20',
+      status: m.status || 'Scheduled',
+      venue: m.venue || 'Global Stadium',
+      date: m.dateTimeGMT || m.date || new Date().toISOString(),
+      series: m.series || 'International Series',
+      teams: m.teams || ['Team A', 'Team B'],
+      score: m.score || [],
+      matchStarted: m.matchStarted || false,
+      matchEnded: m.matchEnded || false
+    }));
   } catch (error) {
     console.error("Fetch Error:", error);
     return [];
