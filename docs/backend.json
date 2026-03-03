@@ -17,6 +17,19 @@
       },
       "required": ["teamA", "teamB", "startTime", "status"]
     },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A cricket competition or series.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "gender": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["name"]
+    },
     "UserProfile": {
       "title": "UserProfile",
       "description": "User profile including role and token balance.",
@@ -36,6 +49,7 @@
       "type": "object",
       "properties": {
         "matchId": { "type": "string" },
+        "tournamentId": { "type": "string" },
         "selectionName": { "type": "string" },
         "stake": { "type": "number" },
         "odds": { "type": "number" },
@@ -50,6 +64,10 @@
     "/matches/{matchId}": {
       "schema": "#/entities/Match",
       "description": "Collection of all cricket matches."
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "#/entities/Tournament",
+      "description": "Collection of active cricket tournaments."
     },
     "/users/{userId}": {
       "schema": "#/entities/UserProfile",
