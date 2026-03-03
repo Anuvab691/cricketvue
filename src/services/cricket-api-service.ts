@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Service for interacting with external Cricket Data APIs.
- * This handles fetching real-time live scores and match schedules using the provided API key.
+ * This handles fetching real-time live scores and match schedules using an API key.
  */
 
 export interface ExternalMatch {
@@ -25,9 +25,10 @@ export interface ExternalMatch {
 }
 
 /**
- * CONFIGURATION: Update these values if you change your API provider.
+ * CONFIGURATION: The API key is pulled from environment variables.
+ * Replace the value in your .env file to update it manually.
  */
-const CRICKET_API_KEY = "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
+const CRICKET_API_KEY = process.env.CRICKET_API_KEY || "D726oFB4PluI7d0ecane53fcZgajB7lxaHxBDrm3";
 const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
 
 /**
@@ -36,6 +37,11 @@ const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
+    if (!CRICKET_API_KEY || CRICKET_API_KEY === 'YOUR_API_KEY_HERE') {
+      console.warn("Cricket API Key is missing or default. Please add a valid CRICKET_API_KEY to your .env file.");
+      return [];
+    }
+
     const response = await fetch(`${API_BASE_URL}?apikey=${CRICKET_API_KEY}`, {
       next: { revalidate: 10 } // Refresh every 10 seconds for "Actual Web" speed
     });
