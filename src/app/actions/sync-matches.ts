@@ -6,6 +6,7 @@ import { fetchLiveMatches, fetchDailySchedule, fetchCompetitions } from '@/servi
 
 /**
  * Synchronizes live/upcoming matches AND tournaments from Sportradar to Firestore.
+ * Updated to handle Trial API rate limits (1 req/sec).
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -20,23 +21,35 @@ export async function syncCricketMatchesAction(db: Firestore) {
       if (Date.now() - lastSync < 10000) return { success: true, reason: 'recent' };
     }
 
-    console.log("[Sync] Pulse: Fetching professional data...");
+    console.log("[Sync] Pulse: Fetching professional data (Sequential for Trial API)...");
     
-    // Fetch a 3-day window for completeness
+    // Dates for the next 3 days
     const dates = [0, 1, 2].map(i => {
       const d = new Date();
       d.setDate(d.getDate() + i);
       return d.toISOString().split('T')[0];
     });
 
-    const [liveMatches, competitions, ...scheduleResults] = await Promise.all([
-      fetchLiveMatches(),
-      fetchCompetitions(),
-      ...dates.map(date => fetchDailySchedule(date))
-    ]);
+    // Sequential fetching to respect Trial API rate limits (1 request per second)
+    const liveMatches = await fetchLiveMatches();
+    await new Promise(r => setTimeout(r, 1100)); // 1.1s delay
+    
+    const competitions = await fetchCompetitions();
+    await new Promise(r => setTimeout(r, 1100));
+
+    const scheduleResults = [];
+    for (const date of dates) {
+      const daily = await fetchDailySchedule(date);
+      if (daily) scheduleResults.push(daily);
+      await new Promise(r => setTimeout(r, 1100));
+    }
 
     const combinedMatches = [...(liveMatches || []), ...scheduleResults.flat().filter(Boolean)];
     
+    if (combinedMatches.length === 0) {
+      console.warn("[Sync] No matches returned from API. Check API Key and Trial restrictions.");
+    }
+
     // 1. Sync Tournaments
     const tournamentBatch = writeBatch(db);
     const tournamentMap = new Map();
@@ -65,11 +78,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }
     });
 
-    // Keywords for major events (ICC Men's T20 etc.)
-    const majorKeywords = ['icc', 't20', 'ipl', 'big bash', 'bbl', 'asia cup', 'world cup', 'test', 'odi', 'trophy', 'series', 'shield', 'premiere'];
-    const filteredTournaments = Array.from(tournamentMap.values()).filter(t => 
-      majorKeywords.some(key => t.name.toLowerCase().includes(key))
-    );
+    const filteredTournaments = Array.from(tournamentMap.values());
 
     filteredTournaments.forEach(t => {
       const tRef = doc(db, 'tournaments', t.id);
@@ -81,10 +90,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const matchMap = new Map();
     combinedMatches.forEach(m => { if (m?.id) matchMap.set(m.id, m); });
     
-    // Filter out placeholders
-    const validMatches = Array.from(matchMap.values()).filter(m => 
-      m.teams && !m.teams.some(t => t.toLowerCase().includes('team a') || t.toLowerCase().includes('team b'))
-    );
+    // For Trial Keys, we allow "Team A" and "Team B" since they are often placeholders for testing
+    const validMatches = Array.from(matchMap.values());
 
     const batch = writeBatch(db);
     let updatedCount = 0;
