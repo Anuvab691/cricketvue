@@ -8,7 +8,7 @@ import { MatchRow } from '@/components/dashboard/MatchRow';
 import { GamesGrid } from '@/components/dashboard/GamesGrid';
 import { 
   Loader2, Search, UserCircle, 
-  Zap, ShieldCheck, Database, RefreshCw, Globe
+  Zap, ShieldCheck, Database, RefreshCw, Globe, AlertTriangle
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { parseISO, isToday, isAfter, startOfToday } from 'date-fns';
@@ -19,6 +19,7 @@ import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -35,6 +36,12 @@ export default function Dashboard() {
     return doc(firestore, 'users', user.uid);
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
+
+  const settingsRef = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return doc(firestore, 'app_settings', 'global');
+  }, [firestore]);
+  const { data: settings } = useDoc(settingsRef);
 
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -57,8 +64,8 @@ export default function Dashboard() {
       setSyncing(false);
     };
 
-    const intervalId = setInterval(performSync, 10000); // 10s Auto-Sync
-    performSync(); // Initial sync on mount
+    const intervalId = setInterval(performSync, 10000); 
+    performSync(); 
     
     return () => clearInterval(intervalId);
   }, [firestore, userData]);
@@ -72,12 +79,9 @@ export default function Dashboard() {
   const baseActiveMatches = (matches || []).filter(m => {
     if (!m.startTime) return false;
     const matchTime = parseISO(m.startTime);
-    
     const isRelevantDate = isToday(matchTime) || isAfter(matchTime, todayStart);
     if (!isRelevantDate) return false;
-
     if (m.status === 'finished' && !isToday(matchTime)) return false;
-
     return true;
   });
 
@@ -97,20 +101,24 @@ export default function Dashboard() {
             <Link href="/">
                <h1 className="text-2xl font-black italic tracking-tighter">ALL</h1>
             </Link>
-            <div className="hidden md:flex items-center gap-2 bg-white/10 rounded px-2 py-1 text-[10px]">
-              <Search size={14} className="opacity-70" />
-              <span>Search Matches</span>
-            </div>
           </div>
           
           <div className="flex items-center gap-4">
             {userData?.role === 'admin' && (
-              <div className={cn(
-                "text-[10px] bg-white/20 px-2 py-1 rounded flex items-center gap-1 text-white transition-all",
-                syncing && "bg-accent/40 animate-pulse"
-              )}>
-                {syncing ? <RefreshCw size={10} className="animate-spin" /> : <ShieldCheck size={10} />}
-                {syncing ? 'AUTO-SYNCING...' : 'NETWORK LIVE'}
+              <div className="flex items-center gap-2">
+                {settings?.syncStatus === 'error' && (
+                  <div className="bg-red-500/20 text-red-200 px-2 py-1 rounded text-[9px] flex items-center gap-1 border border-red-500/30">
+                    <AlertTriangle size={10} /> API KEY ERROR
+                  </div>
+                )}
+                <div className={cn(
+                  "text-[10px] bg-white/20 px-2 py-1 rounded flex items-center gap-1 text-white transition-all",
+                  syncing && "bg-accent/40 animate-pulse"
+                )}>
+                  {syncing ? <RefreshCw size={10} className="animate-spin" /> : <ShieldCheck size={10} />}
+                  {syncing ? 'SYNCING...' : 'NETWORK LIVE'}
+                </div>
+                <SyncDataButton />
               </div>
             )}
             <div className="flex items-center gap-2 text-xs font-bold text-white">
@@ -149,10 +157,10 @@ export default function Dashboard() {
               <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live News
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-[11px] whitespace-nowrap animate-pulse">
-                {activeNav === 'In-Play' 
-                  ? 'Showing all matches currently being played live globally.' 
-                  : 'Automated 10s sync active. Professional Web Data powered by Sportradar.'}
+              <p className="text-[11px] whitespace-nowrap">
+                {settings?.syncStatus === 'error' 
+                  ? `ALERT: API sync encountered an issue (${settings.syncError}).`
+                  : 'Professional Sportradar feed connected. Matches strictly synchronized with real-world events.'}
               </p>
             </div>
           </div>
@@ -160,7 +168,7 @@ export default function Dashboard() {
 
         <div className="p-1 md:p-3">
           <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
-            <div className="flex-1">Match Event ({activeNav})</div>
+            <div className="flex-1">Sportradar Real-World Matches ({activeNav})</div>
             <div className="w-[180px] flex justify-around text-center">
               <div className="w-12">1</div>
               <div className="w-12">X</div>
@@ -172,7 +180,7 @@ export default function Dashboard() {
             {matchesLoading ? (
               <div className="p-20 flex flex-col items-center gap-3 bg-white">
                 <Loader2 className="animate-spin text-primary" size={32} />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Connecting to Markets</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Connecting to Sportradar</span>
               </div>
             ) : filteredMatches.length > 0 ? (
               filteredMatches.map(match => (
@@ -182,9 +190,9 @@ export default function Dashboard() {
               <div className="p-20 text-center flex flex-col items-center gap-4 bg-white border-b border-slate-200">
                 <Database size={40} className="text-slate-200" />
                 <div className="space-y-1">
-                  <p className="text-sm font-black uppercase text-slate-400">No Match Data Found</p>
+                  <p className="text-sm font-black uppercase text-slate-400">No Real Matches Found</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    The network is currently scanning for live and upcoming matches from the web provider.
+                    {settings?.syncStatus === 'error' ? 'Verify your API key in the configuration.' : 'The network is scanning the Sportradar global feed.'}
                   </p>
                 </div>
               </div>
@@ -192,16 +200,15 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-6">
-            <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 px-1">Cricket Specials</h3>
+            <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 px-1">Mini Games (Exchange Simulator)</h3>
             <GamesGrid />
           </div>
         </div>
 
-        {/* Footer info about data source */}
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Actual Web Data Source: Sportradar Professional Services
+            Data Source: Sportradar Professional Real-Time Feed
           </div>
         </footer>
       </main>

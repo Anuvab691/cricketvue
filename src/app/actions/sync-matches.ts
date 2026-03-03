@@ -1,12 +1,12 @@
 
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
 import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/cricket-api-service';
 
 /**
  * Syncs actual real-world cricket data from Sportradar into our Firestore matches collection.
- * Merges live matches with today's scheduled matches.
+ * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -20,14 +20,31 @@ export async function syncCricketMatchesAction(db: Firestore) {
     [...scheduledMatches, ...liveMatches].forEach(m => matchMap.set(m.id, m));
     
     const allMatches = Array.from(matchMap.values());
+    const apiMatchIds = new Set(allMatches.map(m => m.id.replace(/:/g, '_')));
+
+    // 1. CLEANUP: Remove matches from Firestore that are not in the current API response
+    const matchesRef = collection(db, 'matches');
+    const existingSnap = await getDocs(matchesRef);
+    const deleteBatch = writeBatch(db);
+    let deletedCount = 0;
+
+    existingSnap.forEach((docSnap) => {
+      if (!apiMatchIds.has(docSnap.id)) {
+        deleteBatch.delete(docSnap.ref);
+        deletedCount++;
+      }
+    });
+
+    if (deletedCount > 0) {
+      await deleteBatch.commit();
+    }
     
     if (allMatches.length === 0) {
-      console.log("Sync: No matches found for today.");
-      return { success: true, count: 0 };
+      return { success: true, count: 0, deleted: deletedCount };
     }
 
+    // 2. UPDATE/CREATE: Push latest data to Firestore
     const batchPromises = allMatches.map(async (m) => {
-      // Clean ID for Firestore (Sportradar IDs look like sr:sport_event:12345)
       const safeId = m.id.replace(/:/g, '_');
       const matchRef = doc(db, 'matches', safeId);
       
@@ -52,12 +69,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
         statusText: m.status,
         currentScore: scoreString,
         venue: m.venue,
+        source: 'Sportradar',
         lastUpdated: new Date().toISOString()
       };
 
       await setDoc(matchRef, matchData, { merge: true });
         
-      // Ensure basic markets exist
+      // Initialize basic markets if they don't exist
       const marketsRef = collection(db, 'matches', safeId, 'markets');
       const marketsSnap = await getDocs(marketsRef).catch(() => null);
       
@@ -71,19 +89,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
             { id: 'sel_b', name: m.teams[1], odds: 1.90 }
           ]
         });
-
-        if (status === 'live') {
-          const nextBallRef = doc(marketsRef, 'next_ball');
-          await setDoc(nextBallRef, {
-            type: 'next_ball',
-            status: 'open',
-            selections: [
-              { id: 'dot', name: 'Dot Ball', odds: 1.50 },
-              { id: 'boundary', name: 'Boundary', odds: 4.50 },
-              { id: 'wicket', name: 'Wicket', odds: 12.00 }
-            ]
-          });
-        }
       }
     });
 
@@ -92,33 +97,36 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const settingsRef = doc(db, 'app_settings', 'global');
     await setDoc(settingsRef, { 
       lastGlobalSync: new Date().toISOString(),
-      activeMatchesCount: allMatches.length 
+      activeMatchesCount: allMatches.length,
+      syncStatus: 'success',
+      syncError: null
     }, { merge: true });
 
-    return { success: true, count: allMatches.length };
+    return { success: true, count: allMatches.length, deleted: deletedCount };
   } catch (error: any) {
     console.error("Sync Internal Failure:", error);
+    const settingsRef = doc(db, 'app_settings', 'global');
+    await setDoc(settingsRef, { 
+      syncStatus: 'error',
+      syncError: error.message,
+      lastErrorTime: new Date().toISOString()
+    }, { merge: true });
     return { error: error.message };
   }
 }
 
 /**
  * Completely wipes the matches collection.
- * Intended for Administrators to reset the terminal.
  */
 export async function clearAllMatchesAction(db: Firestore) {
   try {
     const matchesRef = collection(db, 'matches');
     const snapshot = await getDocs(matchesRef);
-    
     if (snapshot.empty) return { success: true, count: 0 };
-
     const deletePromises = snapshot.docs.map(mDoc => deleteDoc(mDoc.ref));
     await Promise.all(deletePromises);
-
     return { success: true, count: snapshot.size };
   } catch (error: any) {
-    console.error("Clear Database Failure:", error);
     return { error: error.message };
   }
 }
