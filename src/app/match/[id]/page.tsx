@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -11,6 +12,8 @@ import { Loader2, UserCircle, Zap, ShieldCheck, ChevronLeft } from 'lucide-react
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { format, parseISO } from 'date-fns';
 import { logout } from '@/firebase/auth/auth-service';
+import { useEffect, useState } from 'react';
+import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 import Link from 'next/link';
 
 export default function MatchPage() {
@@ -19,6 +22,7 @@ export default function MatchPage() {
   const firestore = useFirestore();
   const auth = useAuth();
   const { user } = useUser();
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const effectiveUserId = user?.uid || 'guest';
 
@@ -40,6 +44,19 @@ export default function MatchPage() {
 
   const { data: match, loading: matchLoading } = useDoc(matchRef);
   const { data: markets, loading: marketsLoading } = useCollection(marketsQuery);
+
+  // 10-Second Auto-Sync (Runs if user is an Admin)
+  useEffect(() => {
+    if (!firestore || userData?.role !== 'admin') return;
+
+    const interval = setInterval(async () => {
+      setIsSyncing(true);
+      await syncCricketMatchesAction(firestore);
+      setIsSyncing(false);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [firestore, userData?.role]);
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
@@ -88,7 +105,8 @@ export default function MatchPage() {
           <div className="flex items-center gap-4">
             {userData?.role === 'admin' && (
               <div className="text-[10px] bg-white/20 px-2 py-0.5 rounded flex items-center gap-1">
-                <ShieldCheck size={10} /> Live Data Sync Active
+                <ShieldCheck size={10} className={isSyncing ? "text-yellow-400 animate-pulse" : ""} /> 
+                {isSyncing ? 'SYNCING LIVE...' : 'NETWORK ACTIVE'}
               </div>
             )}
             <div className="flex items-center gap-2 text-xs font-bold">

@@ -2,10 +2,11 @@
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc } from 'firebase/firestore';
-import { fetchLiveMatches } from '@/services/cricket-api-service';
+import { fetchLiveMatches, fetchDailySchedule } from '@/services/cricket-api-service';
 
 /**
- * Synchronizes live matches from Sportradar API to Firestore.
+ * Synchronizes live and upcoming matches from Sportradar API to Firestore.
+ * Fetches a 3-day window (Today, Tomorrow, Day After).
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -18,11 +19,31 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: false, reason: 'clearing' };
     }
 
-    console.log("[Sync] Fetching fresh live data from Sportradar...");
-    const externalMatches = await fetchLiveMatches();
+    console.log("[Sync] Fetching 72-hour network window from Sportradar...");
+    
+    // Fetch live matches
+    const liveMatches = await fetchLiveMatches();
+    
+    // Fetch 3-day schedule
+    const dates = [];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+
+    const schedulePromises = dates.map(date => fetchDailySchedule(date));
+    const scheduleResults = await Promise.all(schedulePromises);
+    
+    // Combine all results and deduplicate by ID
+    const combined = [...liveMatches, ...scheduleResults.flat()];
+    const matchMap = new Map();
+    combined.forEach(m => matchMap.set(m.id, m));
+    
+    const externalMatches = Array.from(matchMap.values());
 
     if (!externalMatches || externalMatches.length === 0) {
-      console.log("[Sync] No live matches found in API feed.");
+      console.log("[Sync] No matches found in API feed for the current window.");
       await updateSyncStatus(db, 'success', 0, 0);
       return { success: true, count: 0 };
     }
@@ -46,14 +67,15 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const probHome = match.probabilities?.home || 50;
       const probAway = match.probabilities?.away || 50;
 
+      // Professional back/lay spreads (Back: (1/Prob)*0.98, Lay: (1/Prob)*1.02)
       const homeBack = Math.max(1.01, (100 / probHome) * 0.98);
       const homeLay = Math.max(1.02, (100 / probHome) * 1.02);
       const awayBack = Math.max(1.01, (100 / probAway) * 0.98);
       const awayLay = Math.max(1.02, (100 / probAway) * 1.02);
 
-      // Construct accurate score string
+      // Construct accurate score string from the refined parser
       const scoreStr = match.score 
-        ? match.score.map(s => `${s.inning}: ${s.r}`).join(' | ') 
+        ? match.score.map(s => `${s.r}`).join(' | ') 
         : 'TBD';
 
       const matchData = {
@@ -80,7 +102,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       batch.set(marketRef, {
         id: 'match_winner',
         type: 'match_winner',
-        status: 'open',
+        status: match.status === 'finished' ? 'closed' : 'open',
         selections: [
           { id: 'home', name: matchData.teamA, odds: homeBack, layOdds: homeLay },
           { id: 'away', name: matchData.teamB, odds: awayBack, layOdds: awayLay }

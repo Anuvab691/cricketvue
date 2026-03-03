@@ -48,21 +48,21 @@ async function fetchFromSportradar(endpoint: string) {
   try {
     console.log(`[Sportradar] Fetching Fresh Data: ${url.split('?')[0]}`); 
     const response = await fetch(url, {
-      cache: 'no-store', // CRITICAL: Always fetch fresh live data
+      cache: 'no-store', // CRITICAL: Always fetch fresh live data bypassing Next.js cache
       headers: { 'Accept': 'application/json' }
     });
     
     if (!response.ok) {
       const errorBody = await response.text();
       console.error(`Sportradar API Error: ${response.status} - ${response.statusText}`, errorBody);
-      throw new Error(`Sportradar API Error: ${response.status} (${response.statusText})`);
+      return null;
     }
 
     const data = await response.json();
     return data;
   } catch (error: any) {
     console.error(`Sportradar Fetch Error [${endpoint}]:`, error.message);
-    throw error;
+    return null;
   }
 }
 
@@ -149,38 +149,40 @@ function transformSportradarMatch(summary: any): ExternalMatch {
 
 /**
  * Robust parsing for cricket scores from Sportradar status object.
+ * Ignores "Updating" placeholders and calculates score from raw numeric data.
  */
 function parseSportradarScore(status: any, homeName: string, awayName: string) {
   if (!status) return undefined;
   const scores: any[] = [];
 
-  // 1. Try Home Score
-  if (status.home_score) {
-    let homeText = "";
-    if (status.home_score.display_score) {
-      homeText = status.home_score.display_score;
-    } else if (status.home_score.runs !== undefined) {
-      homeText = `${status.home_score.runs}/${status.home_score.wickets || 0}`;
-      if (status.home_score.overs) homeText += ` (${status.home_score.overs} ov)`;
+  const getCleanScore = (teamScore: any) => {
+    if (!teamScore) return null;
+    let text = "";
+    const display = (teamScore.display_score || "").toLowerCase();
+    
+    // If display_score is empty or generic "updating", use raw numeric data
+    if (display && !display.includes('update') && !display.includes('tba')) {
+      text = teamScore.display_score;
+    } else if (teamScore.runs !== undefined) {
+      text = `${teamScore.runs}/${teamScore.wickets || 0}`;
+      if (teamScore.overs) text += ` (${teamScore.overs} ov)`;
     }
-    if (homeText) scores.push({ inning: homeName, r: homeText });
-  }
+    return text;
+  };
+
+  // 1. Try Home Score
+  const homeText = getCleanScore(status.home_score);
+  if (homeText) scores.push({ inning: homeName, r: homeText });
 
   // 2. Try Away Score
-  if (status.away_score) {
-    let awayText = "";
-    if (status.away_score.display_score) {
-      awayText = status.away_score.display_score;
-    } else if (status.away_score.runs !== undefined) {
-      awayText = `${status.away_score.runs}/${status.away_score.wickets || 0}`;
-      if (status.away_score.overs) awayText += ` (${status.away_score.overs} ov)`;
-    }
-    if (awayText) scores.push({ inning: awayName, r: awayText });
-  }
+  const awayText = getCleanScore(status.away_score);
+  if (awayText) scores.push({ inning: awayName, r: awayText });
 
-  // 3. Fallback to general display score
+  // 3. Fallback to general display score if both failed
   if (scores.length === 0 && status.display_score) {
-    scores.push({ inning: 'Score', r: status.display_score });
+    if (!status.display_score.toLowerCase().includes('update')) {
+      scores.push({ inning: 'Match', r: status.display_score });
+    }
   }
 
   return scores.length > 0 ? scores : undefined;
