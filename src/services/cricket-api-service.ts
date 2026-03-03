@@ -1,8 +1,13 @@
+
 'use server';
 
 /**
- * @fileOverview Service for interacting with external Cricket Data APIs.
- * This handles fetching real-time live scores and match schedules using an API key.
+ * @fileOverview Secure Server-Side Service for Cricket Data.
+ * 
+ * This file uses 'use server' to ensure that all logic, including the usage 
+ * of the CRICKET_API_KEY, stays on the server. Next.js ensures that 
+ * environment variables not prefixed with NEXT_PUBLIC_ are unreachable 
+ * by the client-side browser.
  */
 
 export interface ExternalMatch {
@@ -24,26 +29,23 @@ export interface ExternalMatch {
   matchEnded: boolean;
 }
 
-/**
- * CONFIGURATION: The API key is pulled from environment variables.
- * Ensure you have CRICKET_API_KEY set in your .env file.
- */
 const CRICKET_API_KEY = process.env.CRICKET_API_KEY;
 const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
 
 /**
  * Fetches current real-world matches from the configured API provider.
- * Returns ALL matches provided by the 'currentMatches' endpoint.
+ * This runs EXCLUSIVELY on the server.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     if (!CRICKET_API_KEY || CRICKET_API_KEY === 'YOUR_API_KEY_HERE' || CRICKET_API_KEY === '') {
-      console.warn("Cricket API Key is missing or invalid. Please check your .env file.");
+      // Logged only on the server console for security
+      console.warn("Secure Check: Cricket API Key is missing in environment.");
       return [];
     }
 
     const response = await fetch(`${API_BASE_URL}?apikey=${CRICKET_API_KEY}`, {
-      next: { revalidate: 15 } // Revalidate every 15s to keep "Actual Web" speed
+      next: { revalidate: 15 } // Cache/Revalidate on the server every 15s
     });
     
     if (!response.ok) {
@@ -56,7 +58,6 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       return [];
     }
 
-    // Process and normalize the data without filtering out series
     return json.data.map((m: any) => ({
       id: m.id || `match-${Math.random().toString(36).substr(2, 9)}`,
       name: m.name || 'International Match',
@@ -71,7 +72,8 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       matchEnded: m.matchEnded || false
     }));
   } catch (error) {
-    console.error("Fetch Error:", error);
+    // Error details stay on the server
+    console.error("Secure Data Fetch Failure:", error);
     return [];
   }
 }
