@@ -8,7 +8,7 @@ import { GamesGrid } from '@/components/dashboard/GamesGrid';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 import { 
   Loader2, Search, UserCircle, 
-  Zap, ShieldCheck 
+  Zap, ShieldCheck, Database, RefreshCw
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { parseISO, isToday, isAfter, startOfToday } from 'date-fns';
@@ -98,8 +98,12 @@ export default function Dashboard() {
             {userData?.role === 'admin' && (
               <div className="flex items-center gap-2">
                 <SyncDataButton />
-                <div className="text-[10px] bg-white/20 px-2 py-1 rounded flex items-center gap-1 text-white">
-                  <ShieldCheck size={10} /> {syncing ? 'Syncing...' : 'Network Live'}
+                <div className={cn(
+                  "text-[10px] bg-white/20 px-2 py-1 rounded flex items-center gap-1 text-white transition-all",
+                  syncing && "bg-accent/40 animate-pulse"
+                )}>
+                  {syncing ? <RefreshCw size={10} className="animate-spin" /> : <ShieldCheck size={10} />}
+                  {syncing ? 'UPDATING WEB...' : 'NETWORK LIVE'}
                 </div>
               </div>
             )}
@@ -174,8 +178,21 @@ export default function Dashboard() {
                 <MatchRow key={match.id} match={match} />
               ))
             ) : (
-              <div className="p-12 text-center text-xs text-slate-400 bg-white">
-                {activeNav === 'In-Play' ? 'No matches are currently live.' : 'No active cricket matches found.'}
+              <div className="p-20 text-center flex flex-col items-center gap-4 bg-white border-b border-slate-200">
+                <Database size={40} className="text-slate-200" />
+                <div className="space-y-1">
+                  <p className="text-sm font-black uppercase text-slate-400">No Match Data Found</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    {userData?.role === 'admin' 
+                      ? 'Please use the "Refresh Actual Web" button to sync your first set of matches.' 
+                      : 'No matches are currently live or scheduled in this category.'}
+                  </p>
+                </div>
+                {userData?.role === 'admin' && (
+                  <div className="pt-4">
+                    <SyncDataButton />
+                  </div>
+                )}
               </div>
             )}
           </div>

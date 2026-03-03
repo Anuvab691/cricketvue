@@ -12,9 +12,11 @@ import { FirestorePermissionError } from '@/firebase/errors';
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
+    // This calls the server-side service which securely uses your API Key
     const liveMatchesFromApi = await fetchLiveMatches();
     
-    if (liveMatchesFromApi.length === 0) {
+    if (!liveMatchesFromApi || liveMatchesFromApi.length === 0) {
+      console.log("Sync Check: No matches returned from API provider.");
       return { success: true, count: 0 };
     }
 
