@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams } from 'next/navigation';
@@ -5,7 +6,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
 import { doc, collection, query, orderBy } from 'firebase/firestore';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { Trophy, Zap, UserCircle, Loader2, PlayCircle, Database, RefreshCw } from 'lucide-react';
+import { Trophy, Zap, UserCircle, Loader2, PlayCircle, Database, RefreshCw, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { format, parseISO, isToday, isAfter, startOfToday } from 'date-fns';
@@ -128,7 +129,7 @@ export default function MatchCentrePage() {
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
               <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live Terminal
             </div>
-            <p className="text-[11px] text-slate-500 font-bold">Automatic 10s sync active for all {title} events.</p>
+            <p className="text-[11px] text-slate-500 font-bold">Automatic 10s sync active. Data via Sportradar Professional API.</p>
           </div>
         </div>
 
@@ -207,6 +208,14 @@ export default function MatchCentrePage() {
             </div>
           </div>
         </div>
+
+        {/* Footer info about data source */}
+        <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
+          <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
+            <Globe size={10} />
+            Actual Web Data Source: Sportradar Professional Services
+          </div>
+        </footer>
       </main>
     </div>
   );

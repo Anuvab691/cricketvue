@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
@@ -7,7 +8,7 @@ import { MatchRow } from '@/components/dashboard/MatchRow';
 import { GamesGrid } from '@/components/dashboard/GamesGrid';
 import { 
   Loader2, Search, UserCircle, 
-  Zap, ShieldCheck, Database, RefreshCw
+  Zap, ShieldCheck, Database, RefreshCw, Globe
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { parseISO, isToday, isAfter, startOfToday } from 'date-fns';
@@ -151,7 +152,7 @@ export default function Dashboard() {
               <p className="text-[11px] whitespace-nowrap animate-pulse">
                 {activeNav === 'In-Play' 
                   ? 'Showing all matches currently being played live globally.' 
-                  : 'Automated 10s sync active. All matches powered by professional web providers.'}
+                  : 'Automated 10s sync active. Professional Web Data powered by Sportradar.'}
               </p>
             </div>
           </div>
@@ -183,7 +184,7 @@ export default function Dashboard() {
                 <div className="space-y-1">
                   <p className="text-sm font-black uppercase text-slate-400">No Match Data Found</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    The network is currently scanning for live and upcoming matches.
+                    The network is currently scanning for live and upcoming matches from the web provider.
                   </p>
                 </div>
               </div>
@@ -195,6 +196,14 @@ export default function Dashboard() {
             <GamesGrid />
           </div>
         </div>
+
+        {/* Footer info about data source */}
+        <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
+          <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
+            <Globe size={10} />
+            Actual Web Data Source: Sportradar Professional Services
+          </div>
+        </footer>
       </main>
     </div>
   );
