@@ -42,7 +42,7 @@ async function fetchFromSportradar(endpoint: string) {
   try {
     console.log(`[Sportradar] Fetching: ${url.split('?')[0]}`); // Log URL without key for safety
     const response = await fetch(url, {
-      next: { revalidate: 10 },
+      cache: 'no-store',
       headers: { 'Accept': 'application/json' }
     });
     
