@@ -28,7 +28,7 @@ export interface ExternalMatch {
 }
 
 const CRICKET_API_KEY = process.env.CRICKET_API_KEY;
-const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
+const API_BASE_URL = "https://apiv2.api-cricket.com/cricket/?method=get_leagues&APIkey=e201fde1a6e830e4f58059c3b1253359948dabb35b73c561ac8e6f940099686a";
 
 /**
  * Fetches current real-world matches from the configured API provider.
@@ -36,7 +36,7 @@ const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
-    if (!CRICKET_API_KEY || CRICKET_API_KEY === 'YOUR_API_KEY_HERE' || CRICKET_API_KEY === '') {
+    if (!CRICKET_API_KEY || CRICKET_API_KEY === 'e201fde1a6e830e4f58059c3b1253359948dabb35b73c561ac8e6f940099686a' || CRICKET_API_KEY === '') {
       console.warn("Secure Check: Cricket API Key is missing in environment.");
       return [];
     }

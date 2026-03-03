@@ -1,4 +1,3 @@
-
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
