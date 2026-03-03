@@ -1,55 +1,19 @@
-
 'use client';
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useFirestore } from '@/firebase';
-import { syncCricketMatchesAction, clearAllMatchesAction } from '@/app/actions/sync-matches';
-import { RefreshCw, Trash2, Loader2 } from 'lucide-react';
+import { clearAllMatchesAction } from '@/app/actions/sync-matches';
+import { Trash2, Loader2, Ban } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
-/**
- * A specialized button group for triggering a manual sync or clearing matches.
- * Primarily intended for Admins to verify their API Key and refresh the dashboard.
- */
 export function SyncDataButton() {
-  const [loading, setLoading] = useState(false);
   const [clearing, setClearing] = useState(false);
   const firestore = useFirestore();
 
-  const handleSync = async () => {
-    if (!firestore) return;
-    setLoading(true);
-    
-    try {
-      const result = await syncCricketMatchesAction(firestore);
-      
-      if (result.success) {
-        toast({
-          title: "Sync Successful",
-          description: `Successfully updated ${result.count || 0} real-time matches.`,
-        });
-      } else {
-        toast({
-          title: "Sync Failed",
-          description: result.error || "Verify your API key in the configuration.",
-          variant: "destructive",
-        });
-      }
-    } catch (e: any) {
-      toast({
-        title: "Network Error",
-        description: "Could not reach the cricket data provider.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleClear = async () => {
     if (!firestore) return;
-    if (!confirm("Are you sure you want to PERMANENTLY delete all match data from the database?")) return;
+    if (!confirm("Are you sure you want to PERMANENTLY delete all match data?")) return;
     
     setClearing(true);
     try {
@@ -57,13 +21,7 @@ export function SyncDataButton() {
       if (result.success) {
         toast({
           title: "Database Cleared",
-          description: `Successfully removed ${result.count || 0} matches from the terminal.`,
-        });
-      } else {
-        toast({
-          title: "Clear Failed",
-          description: result.error || "Permission denied.",
-          variant: "destructive",
+          description: `Successfully removed ${result.count || 0} matches.`,
         });
       }
     } catch (e: any) {
@@ -82,23 +40,18 @@ export function SyncDataButton() {
       <Button 
         variant="ghost" 
         size="sm" 
-        onClick={handleSync} 
-        disabled={loading || clearing}
-        className="h-7 text-[10px] font-black uppercase tracking-tighter bg-white/10 hover:bg-white/20 text-white gap-1.5"
+        disabled={true}
+        className="h-7 text-[10px] font-black uppercase tracking-tighter bg-slate-200 text-slate-500 gap-1.5 cursor-not-allowed"
       >
-        {loading ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
-        ) : (
-          <RefreshCw className="w-3 h-3" />
-        )}
-        <span>Sync Now</span>
+        <Ban className="w-3 h-3" />
+        <span>Sync Disabled</span>
       </Button>
 
       <Button 
         variant="ghost" 
         size="sm" 
         onClick={handleClear} 
-        disabled={loading || clearing}
+        disabled={clearing}
         className="h-7 text-[10px] font-black uppercase tracking-tighter bg-red-500/20 hover:bg-red-500/40 text-red-200 gap-1.5 border border-red-500/30"
       >
         {clearing ? (

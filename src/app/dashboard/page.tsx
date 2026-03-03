@@ -1,11 +1,8 @@
-
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { MatchRow } from '@/components/dashboard/MatchRow';
-import { GamesGrid } from '@/components/dashboard/GamesGrid';
 import { 
   Loader2, Search, UserCircle, 
   Zap, ShieldCheck, Database, RefreshCw, Globe, AlertTriangle
@@ -13,7 +10,6 @@ import {
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { parseISO, isToday, isAfter, startOfToday } from 'date-fns';
 import { useEffect, useState } from 'react';
-import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 import { logout } from '@/firebase/auth/auth-service';
 import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
@@ -26,7 +22,6 @@ export default function Dashboard() {
   const auth = useAuth();
   const router = useRouter();
   const { user } = useUser();
-  const [syncing, setSyncing] = useState(false);
   const [activeNav, setActiveNav] = useState('Home');
   
   const effectiveUserId = user?.uid || 'guest';
@@ -43,53 +38,15 @@ export default function Dashboard() {
   }, [firestore]);
   const { data: settings } = useDoc(settingsRef);
 
-  const matchesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
-  }, [firestore]);
-
-  const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
-
-  // High-Frequency Background Sync (Every 10 seconds for Admin)
-  useEffect(() => {
-    if (!firestore || !userData || userData.role !== 'admin') return;
-    
-    const performSync = async () => {
-      setSyncing(true);
-      try {
-        await syncCricketMatchesAction(firestore);
-      } catch (error) {
-        console.error("Auto-sync failed:", error);
-      }
-      setSyncing(false);
-    };
-
-    const intervalId = setInterval(performSync, 10000); 
-    performSync(); 
-    
-    return () => clearInterval(intervalId);
-  }, [firestore, userData]);
+  // Background sync is REMOVED per user request
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
     router.push('/login');
   };
 
-  const todayStart = startOfToday();
-  const baseActiveMatches = (matches || []).filter(m => {
-    if (!m.startTime) return false;
-    const matchTime = parseISO(m.startTime);
-    const isRelevantDate = isToday(matchTime) || isAfter(matchTime, todayStart);
-    if (!isRelevantDate) return false;
-    if (m.status === 'finished' && !isToday(matchTime)) return false;
-    return true;
-  });
-
-  const filteredMatches = baseActiveMatches.filter(m => {
-    if (activeNav === 'In-Play') return m.status === 'live';
-    if (activeNav === 'Multi Markets') return m.status === 'live' || m.status === 'upcoming';
-    return true;
-  });
+  // Matches are filtered out to be empty for "remove all matches" request
+  const filteredMatches = []; 
 
   return (
     <div className="flex min-h-screen bg-[#f8f9fa] text-slate-900">
@@ -106,17 +63,8 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             {userData?.role === 'admin' && (
               <div className="flex items-center gap-2">
-                {settings?.syncStatus === 'error' && (
-                  <div className="bg-red-500/20 text-red-200 px-2 py-1 rounded text-[9px] flex items-center gap-1 border border-red-500/30">
-                    <AlertTriangle size={10} /> API KEY ERROR
-                  </div>
-                )}
-                <div className={cn(
-                  "text-[10px] bg-white/20 px-2 py-1 rounded flex items-center gap-1 text-white transition-all",
-                  syncing && "bg-accent/40 animate-pulse"
-                )}>
-                  {syncing ? <RefreshCw size={10} className="animate-spin" /> : <ShieldCheck size={10} />}
-                  {syncing ? 'SYNCING...' : 'NETWORK LIVE'}
+                <div className="text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 text-white/50">
+                  <ShieldCheck size={10} /> SYNC OFFLINE
                 </div>
                 <SyncDataButton />
               </div>
@@ -154,13 +102,11 @@ export default function Dashboard() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live News
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> System Note
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap">
-                {settings?.syncStatus === 'error' 
-                  ? `ALERT: API sync encountered an issue (${settings.syncError}).`
-                  : 'Professional Sportradar feed connected. Matches strictly synchronized with real-world events.'}
+                Real-world data synchronization is currently paused. No active matches are being displayed.
               </p>
             </div>
           </div>
@@ -168,47 +114,26 @@ export default function Dashboard() {
 
         <div className="p-1 md:p-3">
           <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
-            <div className="flex-1">Sportradar Real-World Matches ({activeNav})</div>
-            <div className="w-[180px] flex justify-around text-center">
-              <div className="w-12">1</div>
-              <div className="w-12">X</div>
-              <div className="w-12">2</div>
-            </div>
+            <div className="flex-1">Live Feed (Offline)</div>
           </div>
 
           <div className="border-x border-slate-200 shadow-sm">
-            {matchesLoading ? (
-              <div className="p-20 flex flex-col items-center gap-3 bg-white">
-                <Loader2 className="animate-spin text-primary" size={32} />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Connecting to Sportradar</span>
+            <div className="p-20 text-center flex flex-col items-center gap-4 bg-white border-b border-slate-200">
+              <Database size={40} className="text-slate-200" />
+              <div className="space-y-1">
+                <p className="text-sm font-black uppercase text-slate-400">Terminal Empty</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  Syncing is disabled. No matches are currently available.
+                </p>
               </div>
-            ) : filteredMatches.length > 0 ? (
-              filteredMatches.map(match => (
-                <MatchRow key={match.id} match={match} />
-              ))
-            ) : (
-              <div className="p-20 text-center flex flex-col items-center gap-4 bg-white border-b border-slate-200">
-                <Database size={40} className="text-slate-200" />
-                <div className="space-y-1">
-                  <p className="text-sm font-black uppercase text-slate-400">No Real Matches Found</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    {settings?.syncStatus === 'error' ? 'Verify your API key in the configuration.' : 'The network is scanning the Sportradar global feed.'}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6">
-            <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 px-1">Mini Games (Exchange Simulator)</h3>
-            <GamesGrid />
+            </div>
           </div>
         </div>
 
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Data Source: Sportradar Professional Real-Time Feed
+            Data Connection: Paused
           </div>
         </footer>
       </main>

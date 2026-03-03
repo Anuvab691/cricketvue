@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams } from 'next/navigation';
@@ -11,7 +10,6 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { format, parseISO, isToday, isAfter, startOfToday } from 'date-fns';
 import { useEffect, useState } from 'react';
-import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 
 const CATEGORY_NAMES: Record<string, string> = {
   international: 'International Series',
@@ -24,7 +22,6 @@ export default function MatchCentrePage() {
   const { type } = useParams();
   const { user } = useUser();
   const firestore = useFirestore();
-  const [syncing, setSyncing] = useState(false);
   const effectiveUserId = user?.uid || 'guest';
 
   const userRef = useMemoFirebase(() => {
@@ -33,48 +30,9 @@ export default function MatchCentrePage() {
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
 
-  const matchesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
-  }, [firestore]);
+  // Background sync is REMOVED per user request
 
-  const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
-
-  // High-Frequency Background Sync (Every 10 seconds for Admin)
-  useEffect(() => {
-    if (!firestore || !userData || userData.role !== 'admin') return;
-    
-    const performSync = async () => {
-      setSyncing(true);
-      try {
-        await syncCricketMatchesAction(firestore);
-      } catch (error) {
-        console.error("Auto-sync failed:", error);
-      }
-      setSyncing(false);
-    };
-
-    const intervalId = setInterval(performSync, 10000); // 10s Auto-Sync
-    performSync(); 
-    
-    return () => clearInterval(intervalId);
-  }, [firestore, userData]);
-
-  const todayStart = startOfToday();
-  const filteredMatches = (matches || []).filter(m => {
-    const category = (type as string).toLowerCase();
-    const matchesCategory = category === 'international' || m.matchType === category;
-    if (!matchesCategory) return false;
-
-    if (!m.startTime) return false;
-    const matchTime = parseISO(m.startTime);
-    const isCurrentOrFuture = isToday(matchTime) || isAfter(matchTime, todayStart);
-    if (!isCurrentOrFuture) return false;
-
-    if (m.status === 'finished' && !isToday(matchTime)) return false;
-
-    return true;
-  });
+  const filteredMatches = []; // Matches are filtered out to be empty per request
 
   const title = CATEGORY_NAMES[type as string] || 'Match Centre';
 
@@ -91,15 +49,9 @@ export default function MatchCentrePage() {
           </div>
           
           <div className="flex items-center gap-4">
-            {userData?.role === 'admin' && (
-              <div className={cn(
-                "text-[10px] bg-white/20 px-2 py-1 rounded flex items-center gap-1 text-white transition-all",
-                syncing && "bg-accent/40 animate-pulse"
-              )}>
-                {syncing ? <RefreshCw size={10} className="animate-spin" /> : <Zap size={10} className="text-yellow-400 fill-yellow-400" />}
-                {syncing ? 'UPDATING...' : 'LIVE'}
-              </div>
-            )}
+            <div className="text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 text-white/50">
+              <Zap size={10} /> SYNC OFFLINE
+            </div>
             <div className="flex items-center gap-2 text-xs font-bold">
               <span className="opacity-80">Balance:</span>
               <span className="text-yellow-400">
@@ -127,9 +79,9 @@ export default function MatchCentrePage() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live Terminal
+              <Zap size={10} /> Information
             </div>
-            <p className="text-[11px] text-slate-500 font-bold">Automatic 10s sync active. Data via Sportradar Professional API.</p>
+            <p className="text-[11px] text-slate-500 font-bold">The match terminal is currently in offline mode.</p>
           </div>
         </div>
 
@@ -137,83 +89,26 @@ export default function MatchCentrePage() {
           <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
             <div className="bg-[#2c3e50] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Trophy size={14} className="text-accent" /> {title} - Current Fixtures
+                <Trophy size={14} className="text-accent" /> {title} - Fixtures Unavailable
               </div>
             </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-200 text-slate-500 font-black uppercase tracking-tighter h-10">
-                    <th className="px-4">Match Event</th>
-                    <th className="px-4">Series / League</th>
-                    <th className="px-4 text-center">Date & Time</th>
-                    <th className="px-4 text-center">Status</th>
-                    <th className="px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {matchesLoading ? (
-                    <tr>
-                      <td colSpan={5} className="p-12 text-center">
-                        <Loader2 className="animate-spin mx-auto text-primary" size={24} />
-                      </td>
-                    </tr>
-                  ) : filteredMatches.length > 0 ? (
-                    filteredMatches.map((match) => (
-                      <tr key={match.id} className="h-14 hover:bg-slate-50 transition-colors">
-                        <td className="px-4">
-                          <div className="flex flex-col">
-                            <span className="font-black uppercase italic tracking-tighter text-slate-800 text-sm">{match.teamA} v {match.teamB}</span>
-                            <span className="text-[10px] text-primary font-mono font-bold">{match.currentScore}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 font-bold text-slate-500 uppercase">{match.series}</td>
-                        <td className="px-4 text-center text-slate-400 font-bold">
-                          {match.startTime ? format(parseISO(match.startTime), 'dd MMM, HH:mm') : 'TBD'}
-                        </td>
-                        <td className="px-4 text-center">
-                          <span className={cn(
-                            "text-[9px] font-black uppercase px-2 py-0.5 rounded-sm",
-                            match.status === 'live' ? "bg-green-500 text-white animate-pulse" : 
-                            match.status === 'finished' ? "bg-slate-200 text-slate-500" : "bg-primary/10 text-primary"
-                          )}>
-                            {match.status}
-                          </span>
-                        </td>
-                        <td className="px-4 text-right">
-                          <Link href={`/match/${match.id}`}>
-                            <button className="bg-primary hover:bg-primary/90 text-white px-4 py-1.5 rounded-sm font-black text-[10px] uppercase italic tracking-tighter inline-flex items-center gap-1">
-                              <PlayCircle size={10} /> View Markets
-                            </button>
-                          </Link>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="p-20 text-center flex flex-col items-center gap-4">
-                        <Database size={40} className="text-slate-200" />
-                        <div className="space-y-1">
-                          <p className="text-sm font-black uppercase text-slate-400">No {title} Data</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Waiting for the automated sync to fetch the latest global cricket fixtures.
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="p-20 text-center flex flex-col items-center gap-4">
+              <Database size={40} className="text-slate-200" />
+              <div className="space-y-1">
+                <p className="text-sm font-black uppercase text-slate-400">No Data Available</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  Real-time match synchronization has been disabled.
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Footer info about data source */}
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Actual Web Data Source: Sportradar Professional Services
+            Data Connection: Paused
           </div>
         </footer>
       </main>
