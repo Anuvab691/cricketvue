@@ -1,8 +1,7 @@
-
 'use server';
 
 /**
- * @fileOverview Modular Server-Side Service for Cricket Data using Sportradar API.
+ * @fileOverview Modular Server-Side Service for Cricket Data using Sportradar API (v2).
  * Handles live matches, schedules, and competition info with robust parsing.
  */
 
@@ -24,7 +23,7 @@ export interface ExternalMatch {
   rawStatusText?: string;
 }
 
-const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
+const SPORTRADAR_BASE_URL = "https://api.sportradar.com";
 
 /**
  * Generic fetcher for Sportradar API.
@@ -36,12 +35,13 @@ async function fetchFromSportradar(endpoint: string) {
     return null;
   }
 
-  // Ensure endpoint is clean
-  const url = `${SPORTRADAR_BASE_URL}${endpoint.replace(/^\//, '')}?api_key=${apiKey}`;
+  // Ensure endpoint is clean and use the correct Sportradar path structure
+  const cleanEndpoint = endpoint.replace(/^\//, '');
+  const url = `${SPORTRADAR_BASE_URL}/${cleanEndpoint}?api_key=${apiKey}`;
 
   try {
     const response = await fetch(url, {
-      next: { revalidate: 10 } // Cache for 10 seconds (matches auto-sync interval)
+      next: { revalidate: 10 } // Cache for 10 seconds
     });
     
     if (!response.ok) {
@@ -60,7 +60,7 @@ async function fetchFromSportradar(endpoint: string) {
  * Fetches current real-time live matches from Sportradar.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
-  const json = await fetchFromSportradar('matches/live.json');
+  const json = await fetchFromSportradar('cricket-t2/en/matches/live.json');
   if (!json || !json.summaries) return [];
   return json.summaries.map(transformSportradarMatch);
 }
@@ -71,7 +71,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
  */
 export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
   const date = dateString || new Date().toISOString().split('T')[0];
-  const json = await fetchFromSportradar(`schedules/${date}/summaries.json`);
+  const json = await fetchFromSportradar(`cricket-t2/en/schedules/${date}/summaries.json`);
   if (!json || !json.summaries) return [];
   return json.summaries.map(transformSportradarMatch);
 }
@@ -82,7 +82,6 @@ export async function fetchDailySchedule(dateString?: string): Promise<ExternalM
 function transformSportradarMatch(summary: any): ExternalMatch {
   const { sport_event, sport_event_status } = summary;
   
-  // Extract Competitors
   const competitors = sport_event.competitors || [];
   const homeTeamObj = competitors.find((c: any) => c.qualifier === 'home') || competitors[0];
   const awayTeamObj = competitors.find((c: any) => c.qualifier === 'away') || competitors[1];
@@ -108,34 +107,19 @@ function transformSportradarMatch(summary: any): ExternalMatch {
   };
 }
 
-/**
- * Deep search for scores in Sportradar status object.
- */
 function parseSportradarScore(status: any, homeName: string, awayName: string) {
   if (!status) return undefined;
-  
   const scores: any[] = [];
-
-  // Check for home_score/away_score objects
-  if (status.home_score?.display_score) {
-    scores.push({ inning: homeName, r: status.home_score.display_score });
-  }
-  if (status.away_score?.display_score) {
-    scores.push({ inning: awayName, r: status.away_score.display_score });
-  }
-
-  // Fallback to top-level display_score if it exists as a single string
-  if (scores.length === 0 && status.display_score) {
-    scores.push({ inning: 'Match', r: status.display_score });
-  }
-
+  if (status.home_score?.display_score) scores.push({ inning: homeName, r: status.home_score.display_score });
+  if (status.away_score?.display_score) scores.push({ inning: awayName, r: status.away_score.display_score });
+  if (scores.length === 0 && status.display_score) scores.push({ inning: 'Match', r: status.display_score });
   return scores.length > 0 ? scores : undefined;
 }
 
 function normalizeMatchType(seriesName: string): string {
   const name = seriesName.toLowerCase();
-  if (name.includes('t20') || name.includes('ipl') || name.includes('bbl') || name.includes('psl')) return 't20';
+  if (name.includes('t20') || name.includes('ipl') || name.includes('bbl')) return 't20';
   if (name.includes('test')) return 'test';
-  if (name.includes('odi') || name.includes('one day') || name.includes('world cup')) return 'odi';
+  if (name.includes('odi') || name.includes('one day')) return 'odi';
   return 'international';
 }

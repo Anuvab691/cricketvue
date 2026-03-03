@@ -1,4 +1,3 @@
-
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
@@ -6,35 +5,31 @@ import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/
 
 /**
  * Syncs actual real-world cricket data from Sportradar into our Firestore matches collection.
- * Performs a 'True Sync' - removing matches from Firestore that are no longer in the API feed
- * or are identified as generic placeholder data (e.g., "Team A", "TBA").
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    // 1. Prepare date strings for Today, Tomorrow, and Day After
     const datesToSync = [0, 1, 2].map(offset => {
       const d = new Date();
       d.setDate(d.getDate() + offset);
       return d.toISOString().split('T')[0];
     });
 
-    // 2. Fetch Live Matches and 3-day Schedule in parallel
-    const [liveMatches, ...schedules] = await Promise.all([
+    // Attempt to fetch data
+    const results = await Promise.allSettled([
       fetchLiveMatches(),
       ...datesToSync.map(date => fetchDailySchedule(date))
     ]);
 
-    // 3. Merge matches, prioritizing live ones for the same ID
+    const allResponses = results.map(r => r.status === 'fulfilled' ? r.value : []);
+    const [liveMatches, ...schedules] = allResponses;
+
     const matchMap = new Map<string, ExternalMatch>();
-    
-    // Process scheduled matches first
     schedules.flat().forEach(m => matchMap.set(m.id, m));
-    // Process live matches second (overwriting scheduled ones if they are the same)
     liveMatches.forEach(m => matchMap.set(m.id, m));
     
     const allMatches = Array.from(matchMap.values());
 
-    // 4. Filter out matches with generic/masked names or placeholder IDs
+    // Filter out placeholders
     const validMatches = allMatches.filter(m => {
       const t1 = (m.teams[0] || '').toLowerCase().trim();
       const t2 = (m.teams[1] || '').toLowerCase().trim();
@@ -42,18 +37,15 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const isGeneric = 
         t1.includes('team a') || t1.includes('team b') || 
         t2.includes('team a') || t2.includes('team b') ||
-        t1.includes('team 1') || t1.includes('team 2') ||
-        t2.includes('team 1') || t2.includes('team 2') ||
         t1 === 'tba' || t2 === 'tba' ||
-        t1 === 'to be announced' || t2 === 'to be announced' ||
-        t1 === 'placeholder' || t2 === 'placeholder';
+        t1 === 'placeholder';
         
       return !isGeneric;
     });
 
     const apiMatchIds = new Set(validMatches.map(m => m.id.replace(/:/g, '_')));
 
-    // 5. CLEANUP: Remove matches from Firestore that are not in the current VALID API response window
+    // CLEANUP
     const matchesRef = collection(db, 'matches');
     const existingSnap = await getDocs(matchesRef);
     const deleteBatch = writeBatch(db);
@@ -61,7 +53,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     existingSnap.forEach((docSnap) => {
       const data = docSnap.data();
-      // Only delete if it's from Sportradar and not in the current 3-day VALID API set
       if (data.source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
         deleteBatch.delete(docSnap.ref);
         deletedCount++;
@@ -77,23 +68,20 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: true, count: 0, deleted: deletedCount };
     }
 
-    // 6. UPDATE/CREATE: Push latest valid data to Firestore
-    const batchPromises = validMatches.map(async (m) => {
+    // UPDATE/CREATE
+    for (const m of validMatches) {
       const safeId = m.id.replace(/:/g, '_');
       const matchRef = doc(db, 'matches', safeId);
       
       let status: 'live' | 'upcoming' | 'finished' = 'upcoming';
-      if (m.matchEnded) {
-        status = 'finished';
-      } else if (m.matchStarted) {
-        status = 'live';
-      }
+      if (m.matchEnded) status = 'finished';
+      else if (m.matchStarted) status = 'live';
 
       const scoreString = m.score 
         ? m.score.map(s => `${s.inning}: ${s.r}`).join(' | ')
         : (status === 'live' ? 'In Progress' : 'Scheduled');
 
-      const matchData = {
+      await setDoc(matchRef, {
         teamA: m.teams[0],
         teamB: m.teams[1],
         startTime: m.date,
@@ -105,28 +93,20 @@ export async function syncCricketMatchesAction(db: Firestore) {
         venue: m.venue,
         source: 'Sportradar',
         lastUpdated: new Date().toISOString()
-      };
+      }, { merge: true });
 
-      await setDoc(matchRef, matchData, { merge: true });
-        
-      // Initialize basic markets if they don't exist
+      // Init basic market
       const marketsRef = collection(db, 'matches', safeId, 'markets');
-      const marketsSnap = await getDocs(marketsRef).catch(() => null);
-      
-      if (marketsSnap && marketsSnap.empty) {
-        const winnerMarketRef = doc(marketsRef, 'match_winner');
-        await setDoc(winnerMarketRef, {
-          type: 'match_winner',
-          status: 'open',
-          selections: [
-            { id: 'sel_a', name: m.teams[0], odds: 1.90 },
-            { id: 'sel_b', name: m.teams[1], odds: 1.90 }
-          ]
-        });
-      }
-    });
-
-    await Promise.all(batchPromises);
+      const winnerMarketRef = doc(marketsRef, 'match_winner');
+      await setDoc(winnerMarketRef, {
+        type: 'match_winner',
+        status: 'open',
+        selections: [
+          { id: 'sel_a', name: m.teams[0], odds: 1.90 },
+          { id: 'sel_b', name: m.teams[1], odds: 1.90 }
+        ]
+      }, { merge: true });
+    }
 
     await updateSyncStatus(db, 'success', validMatches.length, deletedCount);
     return { success: true, count: validMatches.length, deleted: deletedCount };
@@ -148,16 +128,17 @@ async function updateSyncStatus(db: Firestore, status: 'success' | 'error', coun
   }, { merge: true });
 }
 
-/**
- * Completely wipes the matches collection.
- */
 export async function clearAllMatchesAction(db: Firestore) {
   try {
     const matchesRef = collection(db, 'matches');
     const snapshot = await getDocs(matchesRef);
     if (snapshot.empty) return { success: true, count: 0 };
-    const deletePromises = snapshot.docs.map(mDoc => deleteDoc(mDoc.ref));
-    await Promise.all(deletePromises);
+    
+    // Use batches for deletion if large
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    
     return { success: true, count: snapshot.size };
   } catch (error: any) {
     return { error: error.message };
