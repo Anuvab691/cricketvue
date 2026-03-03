@@ -5,8 +5,8 @@ import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { 
-  Loader2, Search, UserCircle, 
-  Zap, ShieldCheck, Database, RefreshCw, Globe, AlertTriangle
+  Loader2, UserCircle, 
+  Zap, ShieldCheck, Database, RefreshCw, Globe
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { useEffect, useState } from 'react';
@@ -48,9 +48,11 @@ export default function Dashboard() {
   }, [firestore]);
   const { data: settings } = useDoc(settingsRef);
 
-  // High-Frequency Auto-Sync (10 seconds)
+  // Fully Automated Global Sync (10 seconds)
+  // This runs for any active user to ensure the network is always live.
+  // The action itself handles concurrency protection using a timestamp lock.
   useEffect(() => {
-    if (!firestore || userData?.role !== 'admin') return;
+    if (!firestore) return;
 
     const interval = setInterval(async () => {
       setIsSyncing(true);
@@ -58,8 +60,11 @@ export default function Dashboard() {
       setIsSyncing(false);
     }, 10000);
 
+    // Immediate initial sync
+    syncCricketMatchesAction(firestore);
+
     return () => clearInterval(interval);
-  }, [firestore, userData?.role]);
+  }, [firestore]);
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
@@ -81,17 +86,15 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center gap-4">
-            {userData?.role === 'admin' && (
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 transition-all",
-                  isSyncing ? "text-yellow-400 animate-pulse" : "text-white/50"
-                )}>
-                  <ShieldCheck size={10} /> {isSyncing ? 'AUTO-SYNCING...' : 'NETWORK LIVE'}
-                </div>
-                <SyncDataButton />
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                "text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 transition-all",
+                isSyncing ? "text-yellow-400 animate-pulse" : "text-white/50"
+              )}>
+                <ShieldCheck size={10} /> {isSyncing ? 'SYNCING NETWORK...' : 'LIVE DATA'}
               </div>
-            )}
+              {userData?.role === 'admin' && <SyncDataButton />}
+            </div>
             <div className="flex items-center gap-2 text-xs font-bold text-white">
               <span className="opacity-80">Balance:</span>
               <span className="text-yellow-400">
@@ -125,11 +128,11 @@ export default function Dashboard() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live Updates
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Auto-Updates
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap">
-                {isSyncing ? 'Synchronizing fresh data from Actual Web source...' : `Last Sync: ${settings?.lastGlobalSync ? new Date(settings.lastGlobalSync).toLocaleTimeString() : 'Awaiting sync'}`}
+                {isSyncing ? 'Synchronizing fresh data from professional source...' : `Last Global Sync: ${settings?.lastGlobalSync ? new Date(settings.lastGlobalSync).toLocaleTimeString() : 'Awaiting pulse'}`}
               </p>
             </div>
           </div>
@@ -161,7 +164,7 @@ export default function Dashboard() {
                 <div className="space-y-1">
                   <p className="text-sm font-black uppercase text-slate-400">No Matches Available</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    The terminal is connected but no matches met the filter criteria.
+                    The terminal is live but no matches met the filter criteria.
                   </p>
                 </div>
               </div>
@@ -180,7 +183,7 @@ export default function Dashboard() {
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Data Connection: Sportradar v2 Secure
+            Network Data: Automated Synchronization Active
           </div>
         </footer>
       </main>

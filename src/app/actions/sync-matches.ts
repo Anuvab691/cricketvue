@@ -6,25 +6,36 @@ import { fetchLiveMatches, fetchDailySchedule } from '@/services/cricket-api-ser
 
 /**
  * Synchronizes live and upcoming matches from Sportradar API to Firestore.
- * Fetches a 3-day window (Today, Tomorrow, Day After).
+ * Implements a 10-second lock to prevent redundant API calls from multiple users.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
     const settingsRef = doc(db, 'app_settings', 'global');
     const settingsSnap = await getDoc(settingsRef);
     
-    // Check if a global clear is in progress
-    if (settingsSnap.exists() && settingsSnap.data().syncStatus === 'clearing') {
-      console.log("[Sync] Skipping sync: Database is currently being cleared.");
-      return { success: false, reason: 'clearing' };
+    if (settingsSnap.exists()) {
+      const data = settingsSnap.data();
+      
+      // 1. Check if a global clear is in progress
+      if (data.syncStatus === 'clearing') {
+        console.log("[Sync] Skipping sync: Database is currently being cleared.");
+        return { success: false, reason: 'clearing' };
+      }
+
+      // 2. Concurrency Protection: Only sync if the last sync was more than 10 seconds ago
+      const lastSync = data.lastGlobalSync ? new Date(data.lastGlobalSync).getTime() : 0;
+      const now = Date.now();
+      if (now - lastSync < 10000) {
+        return { success: true, reason: 'recent_sync_exists' };
+      }
     }
 
-    console.log("[Sync] Fetching 72-hour network window from Sportradar...");
+    console.log("[Sync] Network Sync Triggered: Fetching fresh data from Sportradar...");
     
     // Fetch live matches
     const liveMatches = await fetchLiveMatches();
     
-    // Fetch 3-day schedule
+    // Fetch 3-day schedule to catch tomorrow's games (e.g. Semi-Finals)
     const dates = [];
     for (let i = 0; i < 3; i++) {
       const d = new Date();
@@ -43,12 +54,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const externalMatches = Array.from(matchMap.values());
 
     if (!externalMatches || externalMatches.length === 0) {
-      console.log("[Sync] No matches found in API feed for the current window.");
+      console.log("[Sync] No matches found in API feed.");
       await updateSyncStatus(db, 'success', 0, 0);
       return { success: true, count: 0 };
     }
 
-    // Filter out placeholders and Team A/B generic names
+    // Filter out placeholders and Team A/B generic names strictly
     const validMatches = externalMatches.filter(m => 
       m.teams && 
       !m.teams.some(t => 

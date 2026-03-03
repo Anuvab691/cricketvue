@@ -45,9 +45,10 @@ export default function MatchPage() {
   const { data: match, loading: matchLoading } = useDoc(matchRef);
   const { data: markets, loading: marketsLoading } = useCollection(marketsQuery);
 
-  // 10-Second Auto-Sync (Runs if user is an Admin)
+  // Fully Automated Global Sync (10 seconds)
+  // This ensures individual match pages also contribute to network health
   useEffect(() => {
-    if (!firestore || userData?.role !== 'admin') return;
+    if (!firestore) return;
 
     const interval = setInterval(async () => {
       setIsSyncing(true);
@@ -56,7 +57,7 @@ export default function MatchPage() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [firestore, userData?.role]);
+  }, [firestore]);
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
@@ -103,12 +104,10 @@ export default function MatchPage() {
           </div>
           
           <div className="flex items-center gap-4">
-            {userData?.role === 'admin' && (
-              <div className="text-[10px] bg-white/20 px-2 py-0.5 rounded flex items-center gap-1">
-                <ShieldCheck size={10} className={isSyncing ? "text-yellow-400 animate-pulse" : ""} /> 
-                {isSyncing ? 'SYNCING LIVE...' : 'NETWORK ACTIVE'}
-              </div>
-            )}
+            <div className="text-[10px] bg-white/20 px-2 py-0.5 rounded flex items-center gap-1">
+              <ShieldCheck size={10} className={isSyncing ? "text-yellow-400 animate-pulse" : ""} /> 
+              {isSyncing ? 'SYNCING LIVE...' : 'NETWORK ACTIVE'}
+            </div>
             <div className="flex items-center gap-2 text-xs font-bold">
               <span className="opacity-80">Balance:</span>
               <span className="text-yellow-400">
@@ -139,7 +138,7 @@ export default function MatchPage() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Match Event
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Auto-Sync Active
             </div>
             <p className="text-[11px] font-bold text-slate-600 truncate">
               {match.series} | {match.venue} | {format(matchDate, 'dd/MM/yyyy HH:mm')}
