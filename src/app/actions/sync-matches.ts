@@ -1,9 +1,9 @@
+
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
 import { fetchLiveMatches, ExternalMatch } from '@/services/cricket-api-service';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 /**
  * Normalizes match types for our Match Centre categories.
@@ -30,6 +30,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const liveMatchesFromApi = await fetchLiveMatches();
     
     if (!liveMatchesFromApi || liveMatchesFromApi.length === 0) {
+      console.log("Sync: No live matches found at this moment.");
       return { success: true, count: 0 };
     }
 
@@ -44,7 +45,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }
 
       const scoreString = (m.score && m.score.length > 0)
-        ? m.score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(' | ')
+        ? m.score.map(s => `${s.inning}: ${s.r || 0}`).join(' | ')
         : (status === 'live' ? 'Live - Score Updating...' : 'Scheduled');
 
       const matchData = {
@@ -52,7 +53,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         teamB: m.teams[1] || 'TBD',
         startTime: m.date,
         series: m.series || 'International Series',
-        matchType: normalizeMatchType(m), // Enhanced categorization
+        matchType: normalizeMatchType(m),
         status: status,
         statusText: m.status,
         currentScore: scoreString,
@@ -60,10 +61,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         lastUpdated: new Date().toISOString()
       };
 
-      await setDoc(matchRef, matchData, { merge: true })
-        .catch((e) => {
-          console.error("Write failed for match", m.id, e);
-        });
+      await setDoc(matchRef, matchData, { merge: true });
         
       const marketsRef = collection(db, 'matches', m.id, 'markets');
       const marketsSnap = await getDocs(marketsRef).catch(() => null);
