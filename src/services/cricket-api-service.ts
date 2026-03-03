@@ -4,10 +4,8 @@
 /**
  * @fileOverview Secure Server-Side Service for Cricket Data.
  * 
- * This file uses 'use server' to ensure that all logic, including the usage 
- * of the CRICKET_API_KEY, stays on the server. Next.js ensures that 
- * environment variables not prefixed with NEXT_PUBLIC_ are unreachable 
- * by the client-side browser.
+ * This service is designed to be flexible. It primarily uses CricketData.org 
+ * for live scores but is optimized to fetch a broad range of matches.
  */
 
 export interface ExternalMatch {
@@ -39,13 +37,13 @@ const API_BASE_URL = "https://api.cricketdata.org/v1/currentMatches";
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     if (!CRICKET_API_KEY || CRICKET_API_KEY === 'YOUR_API_KEY_HERE' || CRICKET_API_KEY === '') {
-      // Logged only on the server console for security
       console.warn("Secure Check: Cricket API Key is missing in environment.");
       return [];
     }
 
+    // We fetch current matches which includes a wide variety of series
     const response = await fetch(`${API_BASE_URL}?apikey=${CRICKET_API_KEY}`, {
-      next: { revalidate: 15 } // Cache/Revalidate on the server every 15s
+      next: { revalidate: 15 }
     });
     
     if (!response.ok) {
@@ -61,7 +59,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     return json.data.map((m: any) => ({
       id: m.id || `match-${Math.random().toString(36).substr(2, 9)}`,
       name: m.name || 'International Match',
-      matchType: m.matchType || 't20',
+      matchType: (m.matchType || 't20').toLowerCase(),
       status: m.status || 'Scheduled',
       venue: m.venue || 'Global Stadium',
       date: m.dateTimeGMT || m.date || new Date().toISOString(),
@@ -72,7 +70,6 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
       matchEnded: m.matchEnded || false
     }));
   } catch (error) {
-    // Error details stay on the server
     console.error("Secure Data Fetch Failure:", error);
     return [];
   }

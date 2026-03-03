@@ -1,28 +1,42 @@
+
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
-import { fetchLiveMatches } from '@/services/cricket-api-service';
+import { fetchLiveMatches, ExternalMatch } from '@/services/cricket-api-service';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 /**
+ * Normalizes match types for our Match Centre categories.
+ */
+function normalizeMatchType(match: ExternalMatch): string {
+  const name = (match.name + ' ' + match.series).toLowerCase();
+  if (name.includes('t20') || name.includes('ipl') || name.includes('bbl') || name.includes('psl') || name.includes('t-20')) {
+    return 't20';
+  }
+  if (name.includes('test') || name.includes('trophy') || name.includes('shield')) {
+    return 'test';
+  }
+  if (name.includes('odi') || name.includes('one day') || name.includes('world cup')) {
+    return 'odi';
+  }
+  return match.matchType || 'international';
+}
+
+/**
  * Syncs actual real-world cricket data into our Firestore matches collection.
- * This function processes raw API data into our internal Betting Match format.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    // This calls the server-side service which securely uses your API Key
     const liveMatchesFromApi = await fetchLiveMatches();
     
     if (!liveMatchesFromApi || liveMatchesFromApi.length === 0) {
-      console.log("Sync Check: No matches returned from API provider.");
       return { success: true, count: 0 };
     }
 
     const batchPromises = liveMatchesFromApi.map(async (m) => {
       const matchRef = doc(db, 'matches', m.id);
       
-      // Determine logical status for our UI
       let status: 'live' | 'upcoming' | 'finished' = 'upcoming';
       if (m.matchEnded) {
         status = 'finished';
@@ -30,7 +44,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
         status = 'live';
       }
 
-      // Format Score Array
       const scoreString = (m.score && m.score.length > 0)
         ? m.score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(' | ')
         : (status === 'live' ? 'Live - Score Updating...' : 'Scheduled');
@@ -40,7 +53,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         teamB: m.teams[1] || 'TBD',
         startTime: m.date,
         series: m.series || 'International Series',
-        matchType: m.matchType || 't20', // Crucial for filtering in Match Centre
+        matchType: normalizeMatchType(m), // Enhanced categorization
         status: status,
         statusText: m.status,
         currentScore: scoreString,
@@ -48,24 +61,17 @@ export async function syncCricketMatchesAction(db: Firestore) {
         lastUpdated: new Date().toISOString()
       };
 
-      // Atomic Update to Match Data
-      setDoc(matchRef, matchData, { merge: true })
-        .catch(() => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: matchRef.path,
-            operation: 'write',
-            requestResourceData: matchData,
-          }));
+      await setDoc(matchRef, matchData, { merge: true })
+        .catch((e) => {
+          console.error("Write failed for match", m.id, e);
         });
         
-      // Ensure Betting Markets exist for this match
       const marketsRef = collection(db, 'matches', m.id, 'markets');
       const marketsSnap = await getDocs(marketsRef).catch(() => null);
       
-      // Initialize Default Markets if they are missing
       if (marketsSnap && marketsSnap.empty) {
         const winnerMarketRef = doc(marketsRef, 'match_winner');
-        setDoc(winnerMarketRef, {
+        await setDoc(winnerMarketRef, {
           type: 'match_winner',
           status: 'open',
           selections: [
@@ -76,7 +82,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
         if (status === 'live') {
           const nextBallRef = doc(marketsRef, 'next_ball');
-          setDoc(nextBallRef, {
+          await setDoc(nextBallRef, {
             type: 'next_ball',
             status: 'open',
             selections: [
@@ -92,7 +98,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     await Promise.all(batchPromises);
 
     const settingsRef = doc(db, 'app_settings', 'global');
-    setDoc(settingsRef, { 
+    await setDoc(settingsRef, { 
       lastGlobalSync: new Date().toISOString(),
       activeMatchesCount: liveMatchesFromApi.length 
     }, { merge: true });

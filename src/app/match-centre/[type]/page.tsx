@@ -1,14 +1,16 @@
+
 'use client';
 
 import { useParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
-import { doc, collection, query, orderBy } from 'firebase/firestore';
+import { doc, collection, query, orderBy, where } from 'firebase/firestore';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { Trophy, Zap, UserCircle, Loader2, PlayCircle } from 'lucide-react';
+import { Trophy, Zap, UserCircle, Loader2, PlayCircle, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
+import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 
 const CATEGORY_NAMES: Record<string, string> = {
   international: 'International Series',
@@ -29,6 +31,7 @@ export default function MatchCentrePage() {
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
 
+  // We query all matches and filter in memory or via query if possible
   const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'matches'), orderBy('startTime', 'desc'));
@@ -37,8 +40,9 @@ export default function MatchCentrePage() {
   const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
 
   const filteredMatches = (matches || []).filter(m => {
-    if (type === 'international') return true; // Show all for international/global view
-    return m.matchType?.toLowerCase() === (type as string).toLowerCase();
+    const category = (type as string).toLowerCase();
+    if (category === 'international') return true; // View all
+    return m.matchType === category;
   });
 
   const title = CATEGORY_NAMES[type as string] || 'Match Centre';
@@ -88,15 +92,18 @@ export default function MatchCentrePage() {
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
               <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Live Terminal
             </div>
-            <p className="text-[11px] text-slate-500 italic">Showing matches from the actual web data sync for {title}.</p>
+            <p className="text-[11px] text-slate-500 font-bold">Syncing all {title} events from real-time web providers.</p>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-3">
+        <div className="p-1 md:p-3">
           <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
-            <div className="bg-[#2c3e50] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-              <Trophy size={14} className="text-accent" /> {title} - Current Fixtures
+            <div className="bg-[#2c3e50] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trophy size={14} className="text-accent" /> {title} - Current Fixtures
+              </div>
+              {userData?.role === 'admin' && <SyncDataButton />}
             </div>
             
             <div className="overflow-x-auto">
@@ -150,20 +157,19 @@ export default function MatchCentrePage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="p-16 text-center text-slate-400 italic font-bold uppercase tracking-widest">
-                        No matches currently synced for this category.
+                      <td colSpan={5} className="p-20 text-center flex flex-col items-center gap-4">
+                        <Database size={40} className="text-slate-200" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-black uppercase text-slate-400">No {title} Data</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            Sync your terminal to fetch the latest global cricket fixtures.
+                          </p>
+                        </div>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
-            </div>
-            
-            <div className="bg-slate-50 p-4 border-t border-slate-200">
-              <div className="flex items-center gap-6 text-[10px] text-slate-400 font-bold uppercase">
-                <div className="flex items-center gap-1"><Zap size={10} className="text-accent" /> Data source: Official Web API</div>
-                <div>Matches refresh every 15 seconds</div>
-              </div>
             </div>
           </div>
         </div>
