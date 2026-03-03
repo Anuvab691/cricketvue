@@ -3,38 +3,21 @@
 
 import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
 import { fetchLiveMatches, ExternalMatch } from '@/services/cricket-api-service';
-import { errorEmitter } from '@/firebase/error-emitter';
-
-/**
- * Normalizes match types for our Match Centre categories.
- */
-function normalizeMatchType(match: ExternalMatch): string {
-  const name = (match.name + ' ' + match.series).toLowerCase();
-  if (name.includes('t20') || name.includes('ipl') || name.includes('bbl') || name.includes('psl') || name.includes('t-20')) {
-    return 't20';
-  }
-  if (name.includes('test') || name.includes('trophy') || name.includes('shield')) {
-    return 'test';
-  }
-  if (name.includes('odi') || name.includes('one day') || name.includes('world cup')) {
-    return 'odi';
-  }
-  return match.matchType || 'international';
-}
 
 /**
  * Syncs actual real-world cricket data into our Firestore matches collection.
+ * Now comprehensive: fetches live scores and today's scheduled events.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    const liveMatchesFromApi = await fetchLiveMatches();
+    const matchesFromApi = await fetchLiveMatches();
     
-    if (!liveMatchesFromApi || liveMatchesFromApi.length === 0) {
-      console.log("Sync: No live matches found at this moment.");
+    if (!matchesFromApi || matchesFromApi.length === 0) {
+      console.log("Sync: No active or scheduled matches found.");
       return { success: true, count: 0 };
     }
 
-    const batchPromises = liveMatchesFromApi.map(async (m) => {
+    const batchPromises = matchesFromApi.map(async (m) => {
       const matchRef = doc(db, 'matches', m.id);
       
       let status: 'live' | 'upcoming' | 'finished' = 'upcoming';
@@ -53,7 +36,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         teamB: m.teams[1] || 'TBD',
         startTime: m.date,
         series: m.series || 'International Series',
-        matchType: normalizeMatchType(m),
+        matchType: m.matchType,
         status: status,
         statusText: m.status,
         currentScore: scoreString,
@@ -63,6 +46,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
       await setDoc(matchRef, matchData, { merge: true });
         
+      // Ensure basic markets exist for every match
       const marketsRef = collection(db, 'matches', m.id, 'markets');
       const marketsSnap = await getDocs(marketsRef).catch(() => null);
       
@@ -97,10 +81,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const settingsRef = doc(db, 'app_settings', 'global');
     await setDoc(settingsRef, { 
       lastGlobalSync: new Date().toISOString(),
-      activeMatchesCount: liveMatchesFromApi.length 
+      activeMatchesCount: matchesFromApi.length 
     }, { merge: true });
 
-    return { success: true, count: liveMatchesFromApi.length };
+    return { success: true, count: matchesFromApi.length };
   } catch (error: any) {
     console.error("Sync Internal Failure:", error);
     return { error: error.message };

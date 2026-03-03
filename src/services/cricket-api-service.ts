@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Modular Server-Side Service for Cricket Data.
- * Handles various endpoints like Live Scores, H2H, and League Events.
+ * Handles various endpoints like Live Scores, Leagues, and Events.
  */
 
 export interface ExternalMatch {
@@ -23,6 +23,13 @@ export interface ExternalMatch {
   }>;
   matchStarted: boolean;
   matchEnded: boolean;
+}
+
+export interface ExternalLeague {
+  league_key: string;
+  league_name: string;
+  country_key: string;
+  country_name: string;
 }
 
 const API_BASE_URL = "https://apiv2.api-cricket.com/cricket/";
@@ -59,19 +66,46 @@ async function fetchFromApi(method: string, params: Record<string, string> = {})
 /**
  * Fetches current real-time live matches.
  */
-export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
-  const json = await fetchFromApi('get_livescores');
-  
-  if (!json || !Array.isArray(json.result)) {
-    // If livescores is empty, fallback to events for today
-    const events = await fetchFromApi('get_events', {
-      from: new Date().toISOString().split('T')[0],
-      to: new Date().toISOString().split('T')[0]
-    });
-    return (events?.result || []).map(transformMatch);
-  }
+export async function fetchLiveScores(): Promise<ExternalMatch[]> {
+  const json = await fetchFromApi('get_livescore');
+  return (json?.result || []).map(transformMatch);
+}
 
-  return json.result.map(transformMatch);
+/**
+ * Fetches all available leagues.
+ */
+export async function fetchLeagues(): Promise<ExternalLeague[]> {
+  const json = await fetchFromApi('get_leagues');
+  return json?.result || [];
+}
+
+/**
+ * Fetches events for a specific date range.
+ */
+export async function fetchEvents(from: string, to: string): Promise<ExternalMatch[]> {
+  const json = await fetchFromApi('get_events', { from, to });
+  return (json?.result || []).map(transformMatch);
+}
+
+/**
+ * Fetches current matches by combining Live Scores and Today's Events.
+ */
+export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Parallel fetch for speed
+  const [liveScores, todayEvents] = await Promise.all([
+    fetchLiveScores(),
+    fetchEvents(today, today)
+  ]);
+
+  // Merge results, prioritizing Live Scores for the same match ID
+  const matchMap = new Map<string, ExternalMatch>();
+  
+  todayEvents.forEach(m => matchMap.set(m.id, m));
+  liveScores.forEach(m => matchMap.set(m.id, m));
+
+  return Array.from(matchMap.values());
 }
 
 /**
@@ -88,7 +122,7 @@ function transformMatch(m: any): ExternalMatch {
   return {
     id: m.event_key || m.id || `match-${Math.random().toString(36).substr(2, 9)}`,
     name: `${m.event_home_team} vs ${m.event_away_team}`,
-    matchType: (m.league_name || 't20').toLowerCase(),
+    matchType: normalizeApiMatchType(m.league_name || 't20'),
     status: m.event_status || 'Scheduled',
     venue: m.event_stadium || 'Global Stadium',
     date: m.event_date_start || m.event_date || new Date().toISOString(),
@@ -100,13 +134,21 @@ function transformMatch(m: any): ExternalMatch {
   };
 }
 
+function normalizeApiMatchType(leagueName: string): string {
+  const name = leagueName.toLowerCase();
+  if (name.includes('t20') || name.includes('ipl') || name.includes('bbl') || name.includes('psl') || name.includes('t-20')) return 't20';
+  if (name.includes('test') || name.includes('trophy') || name.includes('shield')) return 'test';
+  if (name.includes('odi') || name.includes('one day') || name.includes('world cup')) return 'odi';
+  return 'international';
+}
+
 function parseScore(m: any) {
   const scores = [];
   if (m.event_home_final_result) {
-    scores.push({ inning: m.event_home_team, r: parseInt(m.event_home_final_result), w: 0, o: 0 });
+    scores.push({ inning: m.event_home_team, r: parseInt(m.event_home_final_result) || 0, w: 0, o: 0 });
   }
   if (m.event_away_final_result) {
-    scores.push({ inning: m.event_away_team, r: parseInt(m.event_away_final_result), w: 0, o: 0 });
+    scores.push({ inning: m.event_away_team, r: parseInt(m.event_away_final_result) || 0, w: 0, o: 0 });
   }
   return scores;
 }
