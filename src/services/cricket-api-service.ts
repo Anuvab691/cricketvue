@@ -23,7 +23,7 @@ export interface ExternalMatch {
   rawStatusText?: string;
 }
 
-const SPORTRADAR_BASE_URL = "https://api.sportradar.com";
+const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
 
 /**
  * Generic fetcher for Sportradar API.
@@ -37,7 +37,7 @@ async function fetchFromSportradar(endpoint: string) {
 
   // Ensure endpoint is clean and use the correct Sportradar path structure
   const cleanEndpoint = endpoint.replace(/^\//, '');
-  const url = `${SPORTRADAR_BASE_URL}/${cleanEndpoint}?api_key=${apiKey}`;
+  const url = `${SPORTRADAR_BASE_URL}${cleanEndpoint}?api_key=${apiKey}`;
 
   try {
     const response = await fetch(url, {
@@ -60,7 +60,7 @@ async function fetchFromSportradar(endpoint: string) {
  * Fetches current real-time live matches from Sportradar.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
-  const json = await fetchFromSportradar('cricket-t2/en/matches/live.json');
+  const json = await fetchFromSportradar('matches/live.json');
   if (!json || !json.summaries) return [];
   return json.summaries.map(transformSportradarMatch);
 }
@@ -71,7 +71,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
  */
 export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
   const date = dateString || new Date().toISOString().split('T')[0];
-  const json = await fetchFromSportradar(`cricket-t2/en/schedules/${date}/summaries.json`);
+  const json = await fetchFromSportradar(`schedules/${date}/summaries.json`);
   if (!json || !json.summaries) return [];
   return json.summaries.map(transformSportradarMatch);
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
@@ -21,12 +20,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
       ...datesToSync.map(date => fetchDailySchedule(date))
     ]);
 
-    const allResponses = results.map(r => r.status === 'fulfilled' ? r.value : []);
+    const allResponses = results.map(r => r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []);
     const [liveMatches, ...schedules] = allResponses;
 
     const matchMap = new Map<string, ExternalMatch>();
-    schedules.flat().forEach(m => matchMap.set(m.id, m));
-    liveMatches.forEach(m => matchMap.set(m.id, m));
+    schedules.flat().forEach(m => { if(m && m.id) matchMap.set(m.id, m) });
+    liveMatches.forEach(m => { if(m && m.id) matchMap.set(m.id, m) });
     
     const allMatches = Array.from(matchMap.values());
 
@@ -54,8 +53,9 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     existingSnap.forEach((docSnap) => {
       const data = docSnap.data();
+      const safeId = docSnap.id;
       // Only purge if it's from the Sportradar source and NOT in the current valid feed
-      if (data.source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
+      if (data.source === 'Sportradar' && !apiMatchIds.has(safeId)) {
         deleteBatch.delete(docSnap.ref);
         deletedCount++;
       }
@@ -137,12 +137,26 @@ export async function clearAllMatchesAction(db: Firestore) {
     const snapshot = await getDocs(matchesRef);
     if (snapshot.empty) return { success: true, count: 0 };
     
+    // Firestore batch limit is 500, but we likely have few matches
+    // To be safe, we just process all in one batch for this prototype
     const batch = writeBatch(db);
-    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    snapshot.docs.forEach(docSnap => {
+      batch.delete(docSnap.ref);
+    });
+    
     await batch.commit();
     
+    // Also reset sync status
+    const settingsRef = doc(db, 'app_settings', 'global');
+    await setDoc(settingsRef, { 
+      activeMatchesCount: 0,
+      lastGlobalSync: null,
+      syncStatus: 'idle'
+    }, { merge: true });
+
     return { success: true, count: snapshot.size };
   } catch (error: any) {
+    console.error("Clear Terminal Error:", error);
     return { error: error.message };
   }
 }
