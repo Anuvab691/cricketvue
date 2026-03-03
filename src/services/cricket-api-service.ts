@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -27,7 +28,7 @@ export interface ExternalMatch {
 const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
 
 /**
- * Generic fetcher for Sportradar API.
+ * Generic fetcher for Sportradar API with no caching for live data.
  */
 async function fetchFromSportradar(endpoint: string) {
   const apiKey = process.env.CRICKET_API_KEY;
@@ -40,9 +41,9 @@ async function fetchFromSportradar(endpoint: string) {
   const url = `${SPORTRADAR_BASE_URL}${cleanEndpoint}?api_key=${apiKey}`;
 
   try {
-    console.log(`[Sportradar] Fetching: ${url.split('?')[0]}`); // Log URL without key for safety
+    console.log(`[Sportradar] Fetching Fresh Data: ${url.split('?')[0]}`); 
     const response = await fetch(url, {
-      cache: 'no-store',
+      cache: 'no-store', // CRITICAL: Always fetch fresh live data
       headers: { 'Accept': 'application/json' }
     });
     
@@ -61,11 +62,12 @@ async function fetchFromSportradar(endpoint: string) {
 }
 
 /**
- * Fetches current real-time live matches from Sportradar.
+ * Fetches current real-time live matches from Sportradar live schedule.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
-    const json = await fetchFromSportradar('matches/live.json');
+    // Using the user-provided live schedule endpoint
+    const json = await fetchFromSportradar('schedules/live/summaries.json');
     if (!json || !json.summaries) return [];
     return json.summaries.map(transformSportradarMatch);
   } catch (e) {
