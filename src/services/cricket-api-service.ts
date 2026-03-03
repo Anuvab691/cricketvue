@@ -1,9 +1,8 @@
-
 'use server';
 
 /**
- * @fileOverview Modular Server-Side Service for Cricket Data using Sportradar API (v2).
- * Handles live matches, schedules, competitions, and outrights.
+ * @fileOverview High-Performance Server-Side Service for Sportradar Cricket v2 API.
+ * Optimized for real-time score construction and probability-based odds parsing.
  */
 
 export interface ExternalMatch {
@@ -41,7 +40,7 @@ export interface ExternalTournament {
 const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
 
 /**
- * Generic fetcher for Sportradar API with no caching for live data.
+ * Core fetcher utilizing 'no-store' to ensure zero caching for live sports data.
  */
 async function fetchFromSportradar(endpoint: string) {
   const apiKey = process.env.CRICKET_API_KEY;
@@ -54,12 +53,12 @@ async function fetchFromSportradar(endpoint: string) {
 
   try {
     const response = await fetch(url, {
-      cache: 'no-store',
+      cache: 'no-store', // CRITICAL: Forces fresh data for live scores
       headers: { 'Accept': 'application/json' }
     });
     
     if (response.status === 401 || response.status === 403) {
-      console.warn("API AUTH ERROR: Invalid or expired API Key.");
+      console.warn("API AUTH ERROR: Verify your Sportradar API Key.");
       return null;
     }
 
@@ -67,14 +66,13 @@ async function fetchFromSportradar(endpoint: string) {
 
     return await response.json();
   } catch (error: any) {
-    console.error(`Sportradar Fetch Error [${endpoint}]:`, error.message);
+    console.error(`Sportradar Network Error [${endpoint}]:`, error.message);
     return null;
   }
 }
 
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
-    // summaries.json is the gold standard for live scores and probabilities
     const json = await fetchFromSportradar('schedules/live/summaries.json');
     if (!json || !json.summaries) return [];
     return json.summaries.map(transformSportradarMatch);
@@ -111,6 +109,9 @@ export async function fetchCompetitions(): Promise<ExternalTournament[]> {
   }
 }
 
+/**
+ * Transforms raw Sportradar JSON into our unified Exchange Match schema.
+ */
 function transformSportradarMatch(summary: any): ExternalMatch {
   const { sport_event, sport_event_status, sport_event_probabilities } = summary;
   
@@ -129,6 +130,7 @@ function transformSportradarMatch(summary: any): ExternalMatch {
   if (matchEnded) status = 'finished';
   else if (matchStarted || rawStatus === 'live' || rawStatus === 'started') status = 'live';
 
+  // Extract probability-based odds for the exchange
   let probabilities;
   if (sport_event_probabilities?.markets) {
     const winnerMarket = sport_event_probabilities.markets.find((m: any) => m.type === 'match_winner');
@@ -160,9 +162,13 @@ function transformSportradarMatch(summary: any): ExternalMatch {
   };
 }
 
+/**
+ * Manually constructs a numeric score string to avoid generic "Updating" text.
+ */
 function parseSportradarScore(status: any, homeName: string, awayName: string) {
   if (!status) return undefined;
   const scores: any[] = [];
+  
   const getCleanScore = (teamScore: any) => {
     if (!teamScore || teamScore.runs === undefined) return null;
     let text = `${teamScore.runs}/${teamScore.wickets || 0}`;
@@ -172,6 +178,7 @@ function parseSportradarScore(status: any, homeName: string, awayName: string) {
 
   const h = getCleanScore(status.home_score);
   if (h) scores.push({ inning: homeName, r: h });
+  
   const a = getCleanScore(status.away_score);
   if (a) scores.push({ inning: awayName, r: a });
 
