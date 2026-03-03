@@ -1,7 +1,7 @@
 
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs, deleteDoc } from 'firebase/firestore';
 import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/cricket-api-service';
 
 /**
@@ -98,6 +98,27 @@ export async function syncCricketMatchesAction(db: Firestore) {
     return { success: true, count: allMatches.length };
   } catch (error: any) {
     console.error("Sync Internal Failure:", error);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Completely wipes the matches collection.
+ * Intended for Administrators to reset the terminal.
+ */
+export async function clearAllMatchesAction(db: Firestore) {
+  try {
+    const matchesRef = collection(db, 'matches');
+    const snapshot = await getDocs(matchesRef);
+    
+    if (snapshot.empty) return { success: true, count: 0 };
+
+    const deletePromises = snapshot.docs.map(mDoc => deleteDoc(mDoc.ref));
+    await Promise.all(deletePromises);
+
+    return { success: true, count: snapshot.size };
+  } catch (error: any) {
+    console.error("Clear Database Failure:", error);
     return { error: error.message };
   }
 }
