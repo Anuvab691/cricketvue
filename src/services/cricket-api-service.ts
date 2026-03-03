@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Modular Server-Side Service for Cricket Data using Sportradar API.
- * Handles live matches, schedules, and competition info.
+ * Handles live matches, schedules, and competition info with robust parsing.
  */
 
 export interface ExternalMatch {
@@ -16,13 +16,12 @@ export interface ExternalMatch {
   series?: string;
   teams: string[];
   score?: Array<{
-    r: number;
-    w: number;
-    o: number;
+    r: string;
     inning: string;
   }>;
   matchStarted: boolean;
   matchEnded: boolean;
+  rawStatusText?: string;
 }
 
 const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
@@ -37,17 +36,17 @@ async function fetchFromSportradar(endpoint: string) {
     return null;
   }
 
-  const url = `${SPORTRADAR_BASE_URL}${endpoint}?api_key=${apiKey}`;
+  // Ensure endpoint is clean
+  const url = `${SPORTRADAR_BASE_URL}${endpoint.replace(/^\//, '')}?api_key=${apiKey}`;
 
   try {
     const response = await fetch(url, {
-      next: { revalidate: 15 } // Cache for 15 seconds to respect rate limits
+      next: { revalidate: 10 } // Cache for 10 seconds (matches auto-sync interval)
     });
     
     if (!response.ok) {
-      if (response.status === 429) {
-        console.warn("Sportradar API: Rate limit exceeded.");
-      }
+      const errorBody = await response.text();
+      console.error(`Sportradar API Error: ${response.status}`, errorBody);
       throw new Error(`Sportradar API Error: ${response.status}`);
     }
     return await response.json();
@@ -61,10 +60,8 @@ async function fetchFromSportradar(endpoint: string) {
  * Fetches current real-time live matches from Sportradar.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
-  // Provided URL: https://api.sportradar.com/cricket-t2/en/matches/live.json
   const json = await fetchFromSportradar('matches/live.json');
   if (!json || !json.summaries) return [];
-
   return json.summaries.map(transformSportradarMatch);
 }
 
@@ -75,7 +72,6 @@ export async function fetchDailySchedule(): Promise<ExternalMatch[]> {
   const today = new Date().toISOString().split('T')[0];
   const json = await fetchFromSportradar(`schedules/${today}/summaries.json`);
   if (!json || !json.summaries) return [];
-
   return json.summaries.map(transformSportradarMatch);
 }
 
@@ -84,46 +80,61 @@ export async function fetchDailySchedule(): Promise<ExternalMatch[]> {
  */
 function transformSportradarMatch(summary: any): ExternalMatch {
   const { sport_event, sport_event_status } = summary;
+  
+  // Extract Competitors
   const competitors = sport_event.competitors || [];
-  const homeTeam = competitors.find((c: any) => c.qualifier === 'home') || competitors[0];
-  const awayTeam = competitors.find((c: any) => c.qualifier === 'away') || competitors[1];
+  const homeTeamObj = competitors.find((c: any) => c.qualifier === 'home') || competitors[0];
+  const awayTeamObj = competitors.find((c: any) => c.qualifier === 'away') || competitors[1];
+
+  const homeName = homeTeamObj?.name || 'Team A';
+  const awayName = awayTeamObj?.name || 'Team B';
 
   const matchStatus = sport_event_status?.match_status || 'not_started';
   
   return {
     id: sport_event.id,
-    name: `${homeTeam?.name || 'TBD'} vs ${awayTeam?.name || 'TBD'}`,
+    name: `${homeName} vs ${awayName}`,
     matchType: normalizeMatchType(sport_event.sport_event_context?.competition?.name || ''),
     status: matchStatus,
     venue: sport_event.venue?.name || 'Global Stadium',
     date: sport_event.start_time,
     series: sport_event.sport_event_context?.competition?.name || 'International Series',
-    teams: [homeTeam?.name || 'Home', awayTeam?.name || 'Away'],
-    score: parseSportradarScore(sport_event_status, homeTeam, awayTeam),
-    matchStarted: matchStatus !== 'not_started' && matchStatus !== 'postponed' && matchStatus !== 'cancelled',
-    matchEnded: matchStatus === 'ended' || matchStatus === 'closed'
+    teams: [homeName, awayName],
+    score: parseSportradarScore(sport_event_status, homeName, awayName),
+    matchStarted: !['not_started', 'postponed', 'cancelled'].includes(matchStatus),
+    matchEnded: ['ended', 'closed', 'complete'].includes(matchStatus),
+    rawStatusText: sport_event_status?.display_status || matchStatus
   };
+}
+
+/**
+ * Deep search for scores in Sportradar status object.
+ */
+function parseSportradarScore(status: any, homeName: string, awayName: string) {
+  if (!status) return undefined;
+  
+  const scores: any[] = [];
+
+  // Check for home_score/away_score objects
+  if (status.home_score?.display_score) {
+    scores.push({ inning: homeName, r: status.home_score.display_score });
+  }
+  if (status.away_score?.display_score) {
+    scores.push({ inning: awayName, r: status.away_score.display_score });
+  }
+
+  // Fallback to top-level display_score if it exists as a single string
+  if (scores.length === 0 && status.display_score) {
+    scores.push({ inning: 'Match', r: status.display_score });
+  }
+
+  return scores.length > 0 ? scores : undefined;
 }
 
 function normalizeMatchType(seriesName: string): string {
   const name = seriesName.toLowerCase();
-  if (name.includes('t20') || name.includes('t-20')) return 't20';
+  if (name.includes('t20') || name.includes('ipl') || name.includes('bbl') || name.includes('psl')) return 't20';
   if (name.includes('test')) return 'test';
-  if (name.includes('odi') || name.includes('one day')) return 'odi';
+  if (name.includes('odi') || name.includes('one day') || name.includes('world cup')) return 'odi';
   return 'international';
-}
-
-function parseSportradarScore(status: any, home: any, away: any) {
-  if (!status) return undefined;
-  
-  // Sportradar display_score usually looks like "150/5 & 20/0"
-  const scores = [];
-  if (status.home_score) {
-    scores.push({ inning: home.name, r: status.home_score.display_score || 0, w: 0, o: 0 });
-  }
-  if (status.away_score) {
-    scores.push({ inning: away.name, r: status.away_score.display_score || 0, w: 0, o: 0 });
-  }
-  
-  return scores.length > 0 ? scores : undefined;
 }

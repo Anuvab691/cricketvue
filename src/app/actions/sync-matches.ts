@@ -1,7 +1,7 @@
 
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs, writeBatch } from 'firebase/firestore';
 import { fetchLiveMatches, fetchDailySchedule, ExternalMatch } from '@/services/cricket-api-service';
 
 /**
@@ -29,7 +29,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
     let deletedCount = 0;
 
     existingSnap.forEach((docSnap) => {
-      if (!apiMatchIds.has(docSnap.id)) {
+      // Don't delete matches that aren't from the API (though currently all are)
+      if (docSnap.data().source === 'Sportradar' && !apiMatchIds.has(docSnap.id)) {
         deleteBatch.delete(docSnap.ref);
         deletedCount++;
       }
@@ -40,6 +41,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     }
     
     if (allMatches.length === 0) {
+      updateSyncStatus(db, 'success', 0, deletedCount);
       return { success: true, count: 0, deleted: deletedCount };
     }
 
@@ -57,7 +59,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
       const scoreString = m.score 
         ? m.score.map(s => `${s.inning}: ${s.r}`).join(' | ')
-        : (status === 'live' ? 'Live - Score Updating...' : 'Scheduled');
+        : (status === 'live' ? 'In Progress' : 'Scheduled');
 
       const matchData = {
         teamA: m.teams[0],
@@ -66,7 +68,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         series: m.series,
         matchType: m.matchType,
         status: status,
-        statusText: m.status,
+        statusText: m.rawStatusText || status,
         currentScore: scoreString,
         venue: m.venue,
         source: 'Sportradar',
@@ -94,25 +96,24 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     await Promise.all(batchPromises);
 
-    const settingsRef = doc(db, 'app_settings', 'global');
-    await setDoc(settingsRef, { 
-      lastGlobalSync: new Date().toISOString(),
-      activeMatchesCount: allMatches.length,
-      syncStatus: 'success',
-      syncError: null
-    }, { merge: true });
-
+    updateSyncStatus(db, 'success', allMatches.length, deletedCount);
     return { success: true, count: allMatches.length, deleted: deletedCount };
   } catch (error: any) {
     console.error("Sync Internal Failure:", error);
-    const settingsRef = doc(db, 'app_settings', 'global');
-    await setDoc(settingsRef, { 
-      syncStatus: 'error',
-      syncError: error.message,
-      lastErrorTime: new Date().toISOString()
-    }, { merge: true });
+    updateSyncStatus(db, 'error', 0, 0, error.message);
     return { error: error.message };
   }
+}
+
+async function updateSyncStatus(db: Firestore, status: 'success' | 'error', count: number, deleted: number, errorMsg?: string) {
+  const settingsRef = doc(db, 'app_settings', 'global');
+  await setDoc(settingsRef, { 
+    lastGlobalSync: new Date().toISOString(),
+    activeMatchesCount: count,
+    syncStatus: status,
+    syncError: errorMsg || null,
+    matchesDeletedInLastSync: deleted
+  }, { merge: true });
 }
 
 /**
