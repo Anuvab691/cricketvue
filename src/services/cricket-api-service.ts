@@ -38,36 +38,42 @@ const SPORTRADAR_BASE_URL = "https://api.sportradar.com/cricket-t2/en/";
 async function fetchFromSportradar(endpoint: string) {
   const apiKey = process.env.CRICKET_API_KEY;
   if (!apiKey || apiKey === 'YOUR_API_KEY_HERE' || apiKey === '') {
-    console.warn("Sportradar Secure Check: API Key is missing or default.");
-    return null;
+    throw new Error("API KEY ERROR: Please add your Sportradar API Key to the environment variables.");
   }
 
   const cleanEndpoint = endpoint.replace(/^\//, '');
   const url = `${SPORTRADAR_BASE_URL}${cleanEndpoint}?api_key=${apiKey}`;
 
   try {
-    console.log(`[Sportradar] Fetching Fresh Data: ${url.split('?')[0]}`); 
+    console.log(`[Sportradar] Fetching: ${url.split('?')[0]}`); 
     const response = await fetch(url, {
-      cache: 'no-store', // CRITICAL: Always fetch fresh live data bypassing Next.js cache
+      cache: 'no-store', // CRITICAL: Bypass Next.js cache for live scores
       headers: { 'Accept': 'application/json' }
     });
     
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("API AUTH ERROR: The provided Sportradar API Key is invalid or has expired.");
+    }
+
+    if (response.status === 429) {
+      throw new Error("API RATE LIMIT: Too many requests. Please wait a moment.");
+    }
+
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`Sportradar API Error: ${response.status} - ${response.statusText}`, errorBody);
+      console.error(`Sportradar API Error: ${response.status} - ${response.statusText}`);
       return null;
     }
 
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error: any) {
     console.error(`Sportradar Fetch Error [${endpoint}]:`, error.message);
-    return null;
+    throw error;
   }
 }
 
 /**
- * Fetches current real-time live matches from Sportradar live schedule.
+ * Fetches current real-time live matches from Sportradar summaries.
+ * The 'summaries' endpoint is superior for live scores vs 'schedule'.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
@@ -76,12 +82,12 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     return json.summaries.map(transformSportradarMatch);
   } catch (e) {
     console.error("fetchLiveMatches failed:", e);
-    return [];
+    throw e;
   }
 }
 
 /**
- * Fetches a specific day's schedule from Sportradar.
+ * Fetches a specific day's schedule from Sportradar summaries.
  */
 export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
   const date = dateString || new Date().toISOString().split('T')[0];
@@ -91,7 +97,7 @@ export async function fetchDailySchedule(dateString?: string): Promise<ExternalM
     return json.summaries.map(transformSportradarMatch);
   } catch (e) {
     console.error(`fetchDailySchedule for ${date} failed:`, e);
-    return [];
+    throw e;
   }
 }
 
@@ -120,7 +126,7 @@ function transformSportradarMatch(summary: any): ExternalMatch {
   // Parse probabilities if available
   let probabilities;
   if (sport_event_probabilities?.markets) {
-    const winnerMarket = sport_event_probabilities.markets.find((m: any) => m.type === 'match_winner' || m.name === 'Match Winner');
+    const winnerMarket = sport_event_probabilities.markets.find((m: any) => m.type === 'match_winner' || m.name?.toLowerCase().includes('winner'));
     if (winnerMarket) {
       probabilities = {
         home: winnerMarket.outcomes.find((o: any) => o.name === 'home' || o.id?.includes('home'))?.probability || 50,
@@ -149,7 +155,7 @@ function transformSportradarMatch(summary: any): ExternalMatch {
 
 /**
  * Robust parsing for cricket scores from Sportradar status object.
- * Ignores "Updating" placeholders and calculates score from raw numeric data.
+ * Ignores generic "Updating" text and prefers actual numeric runs/wickets data.
  */
 function parseSportradarScore(status: any, homeName: string, awayName: string) {
   if (!status) return undefined;
@@ -160,27 +166,28 @@ function parseSportradarScore(status: any, homeName: string, awayName: string) {
     let text = "";
     const display = (teamScore.display_score || "").toLowerCase();
     
-    // If display_score is empty or generic "updating", use raw numeric data
-    if (display && !display.includes('update') && !display.includes('tba')) {
+    // If display_score exists and is not a placeholder, use it
+    if (display && !display.includes('update') && !display.includes('tba') && !display.includes('scheduled')) {
       text = teamScore.display_score;
-    } else if (teamScore.runs !== undefined) {
+    } 
+    // Otherwise, construct from raw numeric fields
+    else if (teamScore.runs !== undefined) {
       text = `${teamScore.runs}/${teamScore.wickets || 0}`;
       if (teamScore.overs) text += ` (${teamScore.overs} ov)`;
     }
     return text;
   };
 
-  // 1. Try Home Score
   const homeText = getCleanScore(status.home_score);
   if (homeText) scores.push({ inning: homeName, r: homeText });
 
-  // 2. Try Away Score
   const awayText = getCleanScore(status.away_score);
   if (awayText) scores.push({ inning: awayName, r: awayText });
 
-  // 3. Fallback to general display score if both failed
+  // Fallback to general display score
   if (scores.length === 0 && status.display_score) {
-    if (!status.display_score.toLowerCase().includes('update')) {
+    const ds = status.display_score.toLowerCase();
+    if (!ds.includes('update') && !ds.includes('scheduled')) {
       scores.push({ inning: 'Match', r: status.display_score });
     }
   }
