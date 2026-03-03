@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -8,9 +9,11 @@ export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
   
-  // Market simulation (for UI summary display)
-  const backOdds = 1.90;
-  const layOdds = 2.10;
+  // Use odds from the match object populated by sync-matches
+  const homeBack = match.odds?.home?.back || 1.90;
+  const homeLay = match.odds?.home?.lay || 1.92;
+  const awayBack = match.odds?.away?.back || 1.90;
+  const awayLay = match.odds?.away?.lay || 1.92;
 
   return (
     <div className="match-row group">
@@ -40,13 +43,14 @@ export function MatchRow({ match }: { match: any }) {
       </div>
 
       <div className="w-[180px] flex justify-around">
+        {/* Home Team Odds */}
         <Link href={`/match/${match.id}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
-            <span>{backOdds.toFixed(2)}</span>
+            <span>{homeBack.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
           <div className="odds-box odds-pink">
-            <span>{layOdds.toFixed(2)}</span>
+            <span>{homeLay.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
         </Link>
@@ -60,13 +64,14 @@ export function MatchRow({ match }: { match: any }) {
           </div>
         </div>
 
+        {/* Away Team Odds */}
         <Link href={`/match/${match.id}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
-            <span>{(backOdds + 0.1).toFixed(2)}</span>
+            <span>{awayBack.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
           <div className="odds-box odds-pink">
-            <span>{(layOdds + 0.1).toFixed(2)}</span>
+            <span>{awayLay.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
         </Link>

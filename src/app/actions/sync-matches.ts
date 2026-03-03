@@ -27,7 +27,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return { success: true, count: 0 };
     }
 
-    // Filter out placeholders like "Team A" or "Team B"
+    // Filter out placeholders
     const validMatches = externalMatches.filter(m => 
       !m.teams.some(t => t.toLowerCase().includes('team a') || t.toLowerCase().includes('team b'))
     );
@@ -38,6 +38,19 @@ export async function syncCricketMatchesAction(db: Firestore) {
     for (const match of validMatches) {
       const matchRef = doc(db, 'matches', match.id);
       
+      // Calculate Back/Lay Odds from Probabilities
+      // Default to 50/50 if not provided
+      const probHome = match.probabilities?.home || 50;
+      const probAway = match.probabilities?.away || 50;
+
+      // Odds = 100 / Probability
+      // Back = Odds * 0.98 (margin)
+      // Lay = Odds * 1.02 (spread)
+      const homeBack = Math.max(1.01, (100 / probHome) * 0.98);
+      const homeLay = Math.max(1.02, (100 / probHome) * 1.02);
+      const awayBack = Math.max(1.01, (100 / probAway) * 0.98);
+      const awayLay = Math.max(1.02, (100 / probAway) * 1.02);
+
       // Basic match data
       const matchData = {
         teamA: match.teams[0] || 'TBA',
@@ -48,21 +61,26 @@ export async function syncCricketMatchesAction(db: Firestore) {
         currentScore: match.score ? match.score.map(s => `${s.inning}: ${s.r}`).join(' | ') : 'TBD',
         venue: match.venue,
         series: match.series || 'International Series',
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
+        // Add top-level odds for fast dashboard rendering
+        odds: {
+          home: { back: homeBack, lay: homeLay },
+          away: { back: awayBack, lay: awayLay }
+        }
       };
 
       batch.set(matchRef, matchData, { merge: true });
       updatedCount++;
 
-      // Create a default market for each match
+      // Update the market subcollection
       const marketRef = doc(collection(db, 'matches', match.id, 'markets'), 'match_winner');
       batch.set(marketRef, {
         id: 'match_winner',
         type: 'match_winner',
         status: 'open',
         selections: [
-          { id: 'home', name: matchData.teamA, odds: 1.90 },
-          { id: 'away', name: matchData.teamB, odds: 1.90 }
+          { id: 'home', name: matchData.teamA, odds: homeBack, layOdds: homeLay },
+          { id: 'away', name: matchData.teamB, odds: awayBack, layOdds: awayLay }
         ]
       }, { merge: true });
     }

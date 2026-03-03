@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Modular Server-Side Service for Cricket Data using Sportradar API (v2).
- * Handles live matches, schedules, and competition info with robust parsing.
+ * Handles live matches, schedules, and competition info with robust parsing and probabilities.
  */
 
 export interface ExternalMatch {
@@ -22,6 +22,11 @@ export interface ExternalMatch {
   matchStarted: boolean;
   matchEnded: boolean;
   rawStatusText?: string;
+  probabilities?: {
+    home: number;
+    away: number;
+    draw?: number;
+  };
 }
 
 // Global Sportradar API Base
@@ -66,7 +71,6 @@ async function fetchFromSportradar(endpoint: string) {
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
-    // Using the user-provided live schedule endpoint
     const json = await fetchFromSportradar('schedules/live/summaries.json');
     if (!json || !json.summaries) return [];
     return json.summaries.map(transformSportradarMatch);
@@ -95,7 +99,7 @@ export async function fetchDailySchedule(dateString?: string): Promise<ExternalM
  * Normalizes Sportradar summary object to our ExternalMatch interface.
  */
 function transformSportradarMatch(summary: any): ExternalMatch {
-  const { sport_event, sport_event_status } = summary;
+  const { sport_event, sport_event_status, sport_event_probabilities } = summary;
   
   const competitors = sport_event.competitors || [];
   const homeTeamObj = competitors.find((c: any) => c.qualifier === 'home') || competitors[0];
@@ -105,6 +109,19 @@ function transformSportradarMatch(summary: any): ExternalMatch {
   const awayName = awayTeamObj?.name || 'Team B';
 
   const matchStatus = sport_event_status?.match_status || 'not_started';
+
+  // Parse probabilities if available
+  let probabilities;
+  if (sport_event_probabilities?.markets) {
+    const winnerMarket = sport_event_probabilities.markets.find((m: any) => m.type === 'match_winner');
+    if (winnerMarket) {
+      probabilities = {
+        home: winnerMarket.outcomes.find((o: any) => o.name === 'home')?.probability || 50,
+        away: winnerMarket.outcomes.find((o: any) => o.name === 'away')?.probability || 50,
+        draw: winnerMarket.outcomes.find((o: any) => o.name === 'draw')?.probability
+      };
+    }
+  }
   
   return {
     id: sport_event.id,
@@ -118,7 +135,8 @@ function transformSportradarMatch(summary: any): ExternalMatch {
     score: parseSportradarScore(sport_event_status, homeName, awayName),
     matchStarted: !['not_started', 'postponed', 'cancelled'].includes(matchStatus),
     matchEnded: ['ended', 'closed', 'complete'].includes(matchStatus),
-    rawStatusText: sport_event_status?.display_status || matchStatus
+    rawStatusText: sport_event_status?.display_status || matchStatus,
+    probabilities
   };
 }
 
