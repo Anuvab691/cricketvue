@@ -58,10 +58,15 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
       }
     };
 
-    if (body) options.body = JSON.stringify(body);
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
 
     const response = await fetch(url, options);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn(`Sportbex Response Not OK [${endpoint}]: ${response.status}`);
+      return null;
+    }
 
     return await response.json();
   } catch (error: any) {
@@ -73,32 +78,35 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 /**
  * Betfair Discovery Phase 1: Fetches active Cricket competitions (Sport ID: 4).
  */
-export async function fetchBetfairCompetitions() {
-  const json = await fetchFromSportbex(`betfair/4`);
+export async function fetchBetfairCompetitions(sportId: string = '4') {
+  const json = await fetchFromSportbex(`betfair/${sportId}`);
   return json?.data || [];
 }
 
 /**
  * Betfair Discovery Phase 2: Fetches events for a specific competition.
  */
-export async function fetchBetfairEvents(competitionId: string) {
-  const json = await fetchFromSportbex(`betfair/event/4/${competitionId}`);
+export async function fetchBetfairEvents(competitionId: string, sportId: string = '4') {
+  const json = await fetchFromSportbex(`betfair/event/${sportId}/${competitionId}`);
   return json?.data || [];
 }
 
 /**
  * Betfair Discovery Phase 3: Fetches markets for a specific event.
  */
-export async function fetchBetfairMarkets(eventId: string) {
-  const json = await fetchFromSportbex(`betfair/markets/4/${eventId}`);
+export async function fetchBetfairMarkets(eventId: string, sportId: string = '4') {
+  const json = await fetchFromSportbex(`betfair/markets/${sportId}/${eventId}`);
   return json?.data || [];
 }
 
 /**
  * Betfair Final Pulse: Fetches the market book (prices) for specific market IDs.
+ * Uses POST as per specification.
  */
-export async function fetchMarketBook(marketId: string) {
-  const json = await fetchFromSportbex(`betfair/listMarketBook/4`, 'POST', { marketIds: marketId });
+export async function fetchMarketBook(marketId: string, sportId: string = '4') {
+  const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
+    marketIds: marketId 
+  });
   return json?.data?.[0] || null;
 }
 
@@ -110,7 +118,6 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
     
-    // Handle variations in response format
     const matchesArray = Array.isArray(json.data) ? json.data : (json.data.matches || []);
     return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
