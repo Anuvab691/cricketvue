@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -7,7 +8,11 @@ import { clearAllMatchesAction, syncCricketMatchesAction } from '@/app/actions/s
 import { Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
-export function SyncDataButton() {
+interface SyncDataButtonProps {
+  onSyncStateChange?: (syncing: boolean) => void;
+}
+
+export function SyncDataButton({ onSyncStateChange }: SyncDataButtonProps) {
   const [clearing, setClearing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const firestore = useFirestore();
@@ -15,6 +20,7 @@ export function SyncDataButton() {
   const handleSync = async () => {
     if (!firestore) return;
     setSyncing(true);
+    onSyncStateChange?.(true);
     try {
       const result = await syncCricketMatchesAction(firestore);
       if (result.success) {
@@ -42,6 +48,7 @@ export function SyncDataButton() {
       });
     } finally {
       setSyncing(false);
+      onSyncStateChange?.(false);
     }
   };
 

@@ -6,17 +6,16 @@ import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { 
   Loader2, UserCircle, 
-  Zap, ShieldCheck, Database, RefreshCw, Globe
+  Zap, ShieldCheck, Database, Globe
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { logout } from '@/firebase/auth/auth-service';
 import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
-import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 import { MatchRow } from '@/components/dashboard/MatchRow';
 import { GamesGrid } from '@/components/dashboard/GamesGrid';
 
@@ -48,24 +47,6 @@ export default function Dashboard() {
   }, [firestore]);
   const { data: settings } = useDoc(settingsRef);
 
-  // Fully Automated Global Sync (10 seconds)
-  // This runs for any active user to ensure the network is always live.
-  // The action itself handles concurrency protection using a timestamp lock.
-  useEffect(() => {
-    if (!firestore) return;
-
-    const interval = setInterval(async () => {
-      setIsSyncing(true);
-      await syncCricketMatchesAction(firestore);
-      setIsSyncing(false);
-    }, 10000);
-
-    // Immediate initial sync
-    syncCricketMatchesAction(firestore);
-
-    return () => clearInterval(interval);
-  }, [firestore]);
-
   const handleLogout = async () => {
     if (auth) await logout(auth);
     router.push('/login');
@@ -93,7 +74,7 @@ export default function Dashboard() {
               )}>
                 <ShieldCheck size={10} /> {isSyncing ? 'SYNCING NETWORK...' : 'LIVE DATA'}
               </div>
-              {userData?.role === 'admin' && <SyncDataButton />}
+              {userData?.role === 'admin' && <SyncDataButton onSyncStateChange={setIsSyncing} />}
             </div>
             <div className="flex items-center gap-2 text-xs font-bold text-white">
               <span className="opacity-80">Balance:</span>
@@ -128,7 +109,7 @@ export default function Dashboard() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Auto-Updates
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Manual Sync Active
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap">
@@ -164,7 +145,7 @@ export default function Dashboard() {
                 <div className="space-y-1">
                   <p className="text-sm font-black uppercase text-slate-400">No Matches Available</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    The terminal is live but no matches met the filter criteria.
+                    Auto-sync is disabled. Click "Sync Now" to fetch live events.
                   </p>
                 </div>
               </div>
@@ -183,7 +164,7 @@ export default function Dashboard() {
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Network Data: Automated Synchronization Active
+            Network Data: Manual Sync Required
           </div>
         </footer>
       </main>

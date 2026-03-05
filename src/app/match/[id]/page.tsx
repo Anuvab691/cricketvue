@@ -12,8 +12,7 @@ import { Loader2, UserCircle, Zap, ShieldCheck, ChevronLeft } from 'lucide-react
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { format, parseISO } from 'date-fns';
 import { logout } from '@/firebase/auth/auth-service';
-import { useEffect, useState } from 'react';
-import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
+import { useState } from 'react';
 import Link from 'next/link';
 
 export default function MatchPage() {
@@ -44,20 +43,6 @@ export default function MatchPage() {
 
   const { data: match, loading: matchLoading } = useDoc(matchRef);
   const { data: markets, loading: marketsLoading } = useCollection(marketsQuery);
-
-  // Fully Automated Global Sync (10 seconds)
-  // This ensures individual match pages also contribute to network health
-  useEffect(() => {
-    if (!firestore) return;
-
-    const interval = setInterval(async () => {
-      setIsSyncing(true);
-      await syncCricketMatchesAction(firestore);
-      setIsSyncing(false);
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [firestore]);
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
@@ -138,7 +123,7 @@ export default function MatchPage() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Auto-Sync Active
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Manual Sync Only
             </div>
             <p className="text-[11px] font-bold text-slate-600 truncate">
               {match.series} | {match.venue} | {format(matchDate, 'dd/MM/yyyy HH:mm')}
