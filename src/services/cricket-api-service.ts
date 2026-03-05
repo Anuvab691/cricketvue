@@ -1,8 +1,8 @@
 'use server';
 
 /**
- * @fileOverview High-Performance Server-Side Service for Sportbex Betfair API.
- * Optimized for professional exchange data flow: Competitions -> Events -> Odds.
+ * @fileOverview High-Performance Server-Side Service for Sportbex API.
+ * Optimized for real-time live match data using the live-score/match/live endpoint.
  */
 
 export interface ExternalMatch {
@@ -15,18 +15,10 @@ export interface ExternalMatch {
   series?: string;
   seriesId?: string;
   teams: string[];
-  score?: Array<{
-    inning: string;
-    r: string;
-  }>;
+  score?: string;
   matchStarted: boolean;
   matchEnded: boolean;
   rawStatusText?: string;
-  probabilities?: {
-    home: number;
-    away: number;
-    draw?: number;
-  };
 }
 
 export interface ExternalTournament {
@@ -77,7 +69,7 @@ async function fetchFromSportbex(endpoint: string) {
 }
 
 /**
- * Fetches Cricket competitions (Step 1 of Sportbex flow).
+ * Fetches Cricket competitions (Tournaments).
  */
 export async function fetchCompetitions(): Promise<ExternalTournament[]> {
   try {
@@ -97,79 +89,55 @@ export async function fetchCompetitions(): Promise<ExternalTournament[]> {
 }
 
 /**
- * Fetches Live Matches by crawling competitions (Step 2 of Sportbex flow).
+ * Fetches Live Matches using the dedicated live-score endpoint.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
-    // 1. Get Competitions
-    const competitionsJson = await fetchFromSportbex(`betfair/competitions/${CRICKET_SPORT_ID}`);
-    if (!competitionsJson || !competitionsJson.data) return [];
+    const json = await fetchFromSportbex(`live-score/match/live`);
+    if (!json || !json.data) return [];
 
-    let allMatches: ExternalMatch[] = [];
-
-    // 2. Fetch events for each competition (Sequential with small delay for rate limits)
-    for (const comp of competitionsJson.data) {
-      if (!comp.id) continue;
-      
-      const eventsJson = await fetchFromSportbex(`betfair/event/${CRICKET_SPORT_ID}/${comp.id}`);
-      
-      if (eventsJson && eventsJson.data) {
-        const transformed = eventsJson.data.map((event: any) => transformSportbexMatch(event, comp.name));
-        allMatches.push(...transformed);
-      }
-      
-      // Delay 100ms to be safe with trial keys
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    return allMatches;
+    return json.data.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
-    console.error("Sportbex Live Fetch Failed:", e);
+    console.error("Sportbex Live Score Fetch Failed:", e);
     return [];
   }
 }
 
 /**
- * Not directly available in Betfair endpoints, but we can simulate via date filtering
- * on active events or competition crawls.
+ * Transforms Sportbex Live Match schema into Terminal Match schema.
  */
-export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
-  // For Sportbex Betfair flow, we typically get all active events via competition crawl.
-  // We filter by date if provided.
-  const matches = await fetchLiveMatches();
-  if (!dateString) return matches;
+function transformSportbexLiveMatch(match: any): ExternalMatch {
+  const homeName = match.home_team || 'TBA';
+  const awayName = match.away_team || 'TBA';
+  
+  // Construct a score string if available
+  let scoreText = undefined;
+  if (match.score_home !== undefined && match.score_away !== undefined) {
+    scoreText = `${match.score_home} - ${match.score_away}`;
+  }
 
-  return matches.filter(m => m.date.startsWith(dateString));
+  return {
+    id: match.id?.toString() || Math.random().toString(),
+    name: `${homeName} v ${awayName}`,
+    matchType: 'cricket',
+    status: 'live',
+    venue: match.venue_name || 'Global Stadium',
+    date: match.match_date || new Date().toISOString(),
+    series: match.competition_name || 'International Series',
+    seriesId: match.competition_id?.toString(),
+    teams: [homeName, awayName],
+    score: scoreText,
+    matchStarted: true,
+    matchEnded: false,
+    rawStatusText: match.match_status_text || 'In Play'
+  };
 }
 
 /**
- * Transforms Betfair Event schema into Exchange Match schema.
- * Sportbex Betfair events use 'eventName' and 'marketId'.
+ * Simplified daily schedule fetch using live data.
  */
-function transformSportbexMatch(event: any, competitionName: string): ExternalMatch {
-  const eventName = event.eventName || 'TBA v TBA';
-  // Split "Team A v Team B" or "Team A vs Team B"
-  const teams = eventName.split(/ v | vs /i).map((t: string) => t.trim());
-  const homeName = teams[0] || 'TBA';
-  const awayName = teams[1] || 'TBA';
-
-  return {
-    id: event.id?.toString() || event.marketId || Math.random().toString(),
-    name: eventName,
-    matchType: 'cricket',
-    status: 'live',
-    venue: event.venue || 'Global Stadium',
-    date: event.openDate || new Date().toISOString(),
-    series: competitionName || 'International Series',
-    seriesId: event.competitionId?.toString(),
-    teams: [homeName, awayName],
-    score: undefined, // Betfair Basic event endpoint usually doesn't provide live scores
-    matchStarted: true,
-    matchEnded: false,
-    rawStatusText: 'In Play',
-    probabilities: {
-      home: 50,
-      away: 50
-    }
-  };
+export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
+  const matches = await fetchLiveMatches();
+  if (!dateString) return matches;
+  return matches.filter(m => m.date.startsWith(dateString));
 }
