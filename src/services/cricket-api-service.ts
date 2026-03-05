@@ -170,7 +170,6 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const homeName = t1.name || match.home_team_name || match.teamA || 'TBA';
   const awayName = t2.name || match.away_team_name || match.teamB || 'TBA';
   
-  // High-fidelity score extraction from the nested team structure
   let scoreText = '';
   if (t1.score && t2.score) {
     scoreText = `${t1.score} v ${t2.score}`;
@@ -184,7 +183,6 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = status === 'COMPLETED' || status === 'finished';
   const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play';
 
-  // Sanitize IDs: Slugify to replace spaces with hyphens for clean Firestore keys
   let finalId = originalId || match.id?.toString() || Math.random().toString(36).substr(2, 9);
   finalId = decodeURIComponent(finalId).trim().replace(/\s+/g, '-').toUpperCase();
 

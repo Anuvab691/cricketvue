@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
-import { PlayCircle, Monitor, Smartphone, Clock, Zap } from 'lucide-react';
+import { PlayCircle, Monitor, Smartphone, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export function MatchRow({ match }: { match: any }) {
@@ -19,10 +19,11 @@ export function MatchRow({ match }: { match: any }) {
 
   useEffect(() => {
     if (!match.lastUpdated) return;
-    const interval = setInterval(() => {
+    const updateTime = () => {
       setLastUpdateText(formatDistanceToNow(parseISO(match.lastUpdated), { addSuffix: true }));
-    }, 5000);
-    setLastUpdateText(formatDistanceToNow(parseISO(match.lastUpdated), { addSuffix: true }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 5000);
     return () => clearInterval(interval);
   }, [match.lastUpdated]);
 
@@ -65,26 +66,26 @@ export function MatchRow({ match }: { match: any }) {
 
       <div className="w-[180px] flex justify-around items-center">
         {/* Home Team Prices */}
-        <Link href={`/match/${matchId}`} className="flex gap-0.5 group/odds">
-          <div className="odds-box odds-blue w-[38px] h-[34px]">
-            <span className="text-xs">{homeBack > 1 ? homeBack.toFixed(2) : '-'}</span>
-          </div>
-          <div className="odds-box odds-pink w-[38px] h-[34px]">
-            <span className="text-xs">{homeLay > 0 ? homeLay.toFixed(2) : '-'}</span>
-          </div>
-        </Link>
+        <div className="flex gap-0.5 group/odds">
+          <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[34px]">
+            <span className="text-xs font-black">{homeBack > 1 ? homeBack.toFixed(2) : '-'}</span>
+          </Link>
+          <Link href={`/match/${matchId}`} className="odds-box odds-pink w-[38px] h-[34px]">
+            <span className="text-xs font-black">{homeLay > 0 ? homeLay.toFixed(2) : '-'}</span>
+          </Link>
+        </div>
         
         <div className="w-px h-6 bg-slate-100 hidden md:block" />
 
         {/* Away Team Prices */}
-        <Link href={`/match/${matchId}`} className="flex gap-0.5 group/odds">
-          <div className="odds-box odds-blue w-[38px] h-[34px]">
-            <span className="text-xs">{awayBack > 1 ? awayBack.toFixed(2) : '-'}</span>
-          </div>
-          <div className="odds-box odds-pink w-[38px] h-[34px]">
-            <span className="text-xs">{awayLay > 0 ? awayLay.toFixed(2) : '-'}</span>
-          </div>
-        </Link>
+        <div className="flex gap-0.5 group/odds">
+          <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[34px]">
+            <span className="text-xs font-black">{awayBack > 1 ? awayBack.toFixed(2) : '-'}</span>
+          </Link>
+          <Link href={`/match/${matchId}`} className="odds-box odds-pink w-[38px] h-[34px]">
+            <span className="text-xs font-black">{awayLay > 0 ? awayLay.toFixed(2) : '-'}</span>
+          </Link>
+        </div>
       </div>
     </div>
   );
