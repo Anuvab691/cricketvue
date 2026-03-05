@@ -1,11 +1,10 @@
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc } from 'firebase/firestore';
-import { fetchLiveMatches, fetchCompetitions } from '@/services/cricket-api-service';
+import { fetchLiveMatches, fetchCompetitions, fetchMatchDetail } from '@/services/cricket-api-service';
 
 /**
- * Synchronizes matches and tournaments from Sportbex to Firestore using Betfair flow.
- * Professional-grade sync engine with anti-collision protection.
+ * Professional-grade sync engine with sequential rate-limiting for Trial API.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -17,21 +16,21 @@ export async function syncCricketMatchesAction(db: Firestore) {
       if (data.syncStatus === 'clearing') return { success: false, reason: 'clearing' };
       const lastSync = data.lastGlobalSync ? new Date(data.lastGlobalSync).getTime() : 0;
       
-      // Concurrency Lock: Minimum 8s between network pulses (resilient to Sportbex trial limits)
+      // Concurrency Lock: Minimum 8s between network pulses
       if (Date.now() - lastSync < 8000) {
         return { success: true, reason: 'recent' };
       }
     }
 
-    // 1. Fetch Fresh Data using the Betfair Competitions -> Events flow
-    const liveMatches = await fetchLiveMatches();
+    // 1. Discovery: Get all live matches from network
+    const liveMatchesOverview = await fetchLiveMatches();
     const competitions = await fetchCompetitions();
 
-    if (liveMatches.length === 0 && competitions.length === 0) {
+    if (liveMatchesOverview.length === 0 && competitions.length === 0) {
       return { success: false, reason: 'no-data' };
     }
 
-    // 2. Sync Tournaments (Competitions)
+    // 2. Sync Tournaments
     const tournamentBatch = writeBatch(db);
     competitions.forEach(t => {
       const tRef = doc(db, 'tournaments', t.id);
@@ -39,30 +38,33 @@ export async function syncCricketMatchesAction(db: Firestore) {
     });
     await tournamentBatch.commit();
 
-    // 3. Sync Matches (Events)
+    // 3. Deep Sync: Fetch details for each live match sequentially
     const batch = writeBatch(db);
     let updatedCount = 0;
 
-    for (const match of liveMatches) {
+    for (const overview of liveMatchesOverview) {
+      // Respect Trial API Rate Limit (1s delay between detail calls)
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      
+      const match = await fetchMatchDetail(overview.id);
+      if (!match) continue;
+
       const matchRef = doc(db, 'matches', match.id);
       
-      // Calculate Professional Back/Lay Jitter for Trial data
+      // Market Odds Jitter for Trial Data
       const baseOdds = 1.90;
-      const jitter = (Math.random() * 0.1) - 0.05;
+      const jitter = (Math.random() * 0.06) - 0.03;
 
       const matchData: any = {
+        ...match,
         teamA: match.teams[0],
         teamB: match.teams[1],
         startTime: match.date,
-        status: match.status,
-        statusText: match.rawStatusText,
-        venue: match.venue,
-        series: match.series,
-        seriesId: match.seriesId,
+        currentScore: match.score || '0/0',
         lastUpdated: new Date().toISOString(),
         odds: {
           home: { back: baseOdds + jitter, lay: (baseOdds + jitter) + 0.02 },
-          away: { back: (4.0 - baseOdds) - jitter, lay: ((4.0 - baseOdds) - jitter) + 0.02 }
+          away: { back: (3.95 - baseOdds) - jitter, lay: ((3.95 - baseOdds) - jitter) + 0.02 }
         }
       };
 
@@ -93,7 +95,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     return { success: true, count: updatedCount, tournamentsCount: competitions.length };
   } catch (error: any) {
-    console.error("Sportbex Network Failure:", error);
+    console.error("Sportbex Sync Failure:", error);
     return { success: false, error: error.message };
   }
 }
@@ -107,7 +109,6 @@ export async function clearAllMatchesAction(db: Firestore) {
     for (const col of collections) {
       const snap = await getDocs(collection(db, col));
       for (const docSnap of snap.docs) {
-        // Clear subcollections first
         const marketsSnap = await getDocs(collection(db, col, docSnap.id, 'markets'));
         const b = writeBatch(db);
         marketsSnap.docs.forEach(d => b.delete(d.ref));
