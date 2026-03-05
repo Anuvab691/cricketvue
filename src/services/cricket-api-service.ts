@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -25,7 +24,7 @@ export interface ExternalMatch {
   matchEnded: boolean;
   statusText?: string;
   marketId?: string;
-  eventId?: string;
+  betfairEventId?: string; // Professional Mapping ID
   odds?: {
     home: { back: number; lay: number };
     away: { back: number; lay: number };
@@ -47,13 +46,14 @@ const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
 const API_KEY = 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
 
 async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: any) {
+  const envKey = process.env.SPORTBEX_API_KEY;
   const url = `${SPORTBEX_BASE_URL}${endpoint.replace(/^\//, '')}`;
   try {
     const options: RequestInit = {
       method,
       cache: 'no-store',
       headers: { 
-        'sportbex-api-key': API_KEY,
+        'sportbex-api-key': envKey || API_KEY,
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       }
@@ -103,12 +103,41 @@ export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
 }
 
 /**
- * Discovery Phase 5: Premium Fancy (GET)
+ * Professional Premium Fancy odds fetcher.
+ * Uses eventId to fetch high-frequency micro-market data.
  */
-export async function fetchPremiumFancy(eventId: string, sportId: string = '4') {
-  if (!eventId) return null;
-  const json = await fetchFromSportbex(`betfair/getPremium/${sportId}/${eventId}`);
-  return json?.data || null;
+export async function fetchPremiumFancy(eventId: string) {
+  const apiKey = process.env.SPORTBEX_API_KEY || API_KEY;
+
+  if (!apiKey) {
+    console.warn("SPORTBEX_API_KEY missing");
+    return [];
+  }
+
+  const url = `https://trial-api.sportbex.com/api/betfair/getPremium/4/${eventId}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "sportbex-api-key": apiKey,
+        "Accept": "application/json"
+      }
+    });
+
+    if (!res.ok) {
+      console.error("Premium Fancy fetch failed", res.status);
+      return [];
+    }
+
+    const json = await res.json();
+    return json?.data || [];
+
+  } catch (err) {
+    console.error("Premium Fancy error", err);
+    return [];
+  }
 }
 
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {

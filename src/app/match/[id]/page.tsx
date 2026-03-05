@@ -10,10 +10,10 @@ import { Loader2, UserCircle, Zap, ShieldCheck, ChevronLeft, Database, Globe, In
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { format, parseISO } from 'date-fns';
 import { logout } from '@/firebase/auth/auth-service';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
+import { fetchPremiumFancy } from '@/services/cricket-api-service';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +23,7 @@ export default function MatchPage() {
   const firestore = useFirestore();
   const auth = useAuth();
   const { user } = useUser();
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [premiumFancyData, setPremiumFancyData] = useState<any[]>([]);
   
   const rawId = params?.id as string;
   const id = rawId ? decodeURIComponent(rawId) : null;
@@ -48,6 +48,21 @@ export default function MatchPage() {
 
   const { data: match, loading: matchLoading } = useDoc(matchRef);
   const { data: markets, loading: marketsLoading } = useCollection(marketsQuery);
+
+  // High-Frequency Premium Fancy Pulse
+  useEffect(() => {
+    if (match?.betfairEventId) {
+      const loadPremium = async () => {
+        const data = await fetchPremiumFancy(match.betfairEventId!);
+        if (data && Array.isArray(data)) {
+          setPremiumFancyData(data);
+        }
+      };
+      loadPremium();
+      const interval = setInterval(loadPremium, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [match?.betfairEventId]);
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
@@ -87,7 +102,6 @@ export default function MatchPage() {
       <Sidebar userId={effectiveUserId} />
       
       <main className="flex-1 lg:pl-[240px] flex flex-col">
-        {/* Top Header */}
         <header className="exchange-header h-12">
           <div className="flex items-center gap-4">
             <Link href="/">
@@ -109,7 +123,6 @@ export default function MatchPage() {
           </div>
         </header>
 
-        {/* Secondary Nav */}
         <nav className="exchange-nav">
           <div className="flex items-center justify-between w-full h-full">
             <div className="flex items-center gap-4 h-full">
@@ -128,7 +141,6 @@ export default function MatchPage() {
           </div>
         </nav>
 
-        {/* Professional Scoreboard Section */}
         <div className="bg-[#1a2531] text-white overflow-hidden shadow-lg m-1 md:m-3 rounded-sm">
           <div className="flex justify-between items-center bg-[#0d141b] px-4 py-1.5 border-b border-white/5">
              <span className="text-[11px] font-black uppercase italic tracking-tighter text-accent">{match.teamA} V {match.teamB}</span>
@@ -136,7 +148,6 @@ export default function MatchPage() {
           </div>
           
           <div className="p-4 md:p-6 flex flex-col md:flex-row gap-6 md:items-center">
-            {/* Live Scores */}
             <div className="flex-1 space-y-3">
                <div className="flex items-center justify-between group">
                   <div className="space-y-1">
@@ -160,7 +171,6 @@ export default function MatchPage() {
                </div>
             </div>
 
-            {/* Run Rate & Projection */}
             <div className="w-full md:w-[300px] bg-black/30 p-4 rounded-sm border border-white/5 flex flex-col justify-center">
                <div className="grid grid-cols-2 gap-4">
                   <div className="text-center border-r border-white/5">
@@ -179,7 +189,6 @@ export default function MatchPage() {
                </div>
             </div>
 
-            {/* Last Balls Pulse */}
             <div className="flex md:flex-col gap-2 md:gap-4 items-center justify-center">
                <div className="flex gap-1.5">
                   {[1, 0, 4, 1, 'W', 1].map((ball, i) => (
@@ -196,10 +205,13 @@ export default function MatchPage() {
           </div>
         </div>
 
-        {/* Content Area */}
         <div className="p-1 md:p-3 grid grid-cols-1 lg:grid-cols-[1fr,320px] gap-3">
           <div className="space-y-3">
-            <BettingPanel match={{...match, markets}} userId={effectiveUserId} />
+            <BettingPanel 
+              match={{...match, markets}} 
+              userId={effectiveUserId} 
+              premiumFancyOverride={premiumFancyData}
+            />
           </div>
           
           <div className="space-y-3">

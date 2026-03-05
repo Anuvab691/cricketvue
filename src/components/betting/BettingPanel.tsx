@@ -10,7 +10,7 @@ import { Trophy, Zap, Info, Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
 import { cn } from '@/lib/utils';
 
-export function BettingPanel({ match, userId }: { match: any, userId: string }) {
+export function BettingPanel({ match, userId, premiumFancyOverride }: { match: any, userId: string, premiumFancyOverride?: any[] }) {
   const [stake, setStake] = useState<string>('100');
   const [loading, setLoading] = useState(false);
   const firestore = useFirestore();
@@ -54,6 +54,11 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
   const bookmakerMarket = match.markets?.find((m: any) => m.type === 'bookmaker');
   const fancyMarket = match.markets?.find((m: any) => m.type === 'fancy');
   const premiumFancyMarket = match.markets?.find((m: any) => m.type === 'premium_fancy');
+
+  // Runners for Premium Fancy - prioritizing fresh override from the page
+  const premiumRunners = premiumFancyOverride && premiumFancyOverride.length > 0 
+    ? premiumFancyOverride 
+    : (premiumFancyMarket?.selections || []);
 
   return (
     <div className="space-y-4">
@@ -196,24 +201,23 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
           </div>
         </div>
 
-        {/* Premium Fancy Section */}
         <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
           <div className="market-header bg-[#e67e22]">
             <span>Premium Fancy</span>
             <Badge variant="outline" className="text-[9px] border-white/20 text-white h-4 font-black">HIGH LIQUIDITY</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-100">
-            {premiumFancyMarket ? premiumFancyMarket.selections.map((premium: any, idx: number) => (
+            {premiumRunners.length > 0 ? premiumRunners.map((runner: any, idx: number) => (
               <div key={idx} className="bg-white p-3 flex justify-between items-center h-auto min-h-[48px]">
-                <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight max-w-[140px] leading-tight">{premium.name}</span>
+                <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight max-w-[140px] leading-tight">{runner.runnerName || runner.name}</span>
                 <div className="flex gap-1">
                    <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center hover:bg-pink-200">
-                     <span className="text-xs font-black">{premium.no || 0}</span>
-                     <span className="text-[8px] font-bold">No</span>
+                     <span className="text-xs font-black">{runner.layPrice || runner.no || 0}</span>
+                     <span className="text-[8px] font-bold">Lay</span>
                    </button>
                    <button className="w-12 h-9 bg-blue-100 border border-blue-200 text-blue-700 rounded-sm flex flex-col items-center justify-center hover:bg-blue-200">
-                     <span className="text-xs font-black">{premium.yes || 0}</span>
-                     <span className="text-[8px] font-bold">Yes</span>
+                     <span className="text-xs font-black">{runner.backPrice || runner.yes || 0}</span>
+                     <span className="text-[8px] font-bold">Back</span>
                    </button>
                 </div>
               </div>

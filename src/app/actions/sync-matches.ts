@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
@@ -94,7 +93,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
       if (betfairInfo) {
         const book = marketBooks.find(b => b.marketId === betfairInfo.marketId);
         if (book && book.runners) {
-          // Map runners to teams via fuzzy name match
           const homeTeam = (matchData.teamA || '').toLowerCase();
           const awayTeam = (matchData.teamB || '').toLowerCase();
 
@@ -119,7 +117,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
             }
           };
 
-          // Store the professional Match Winner market
           const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
           setDoc(marketSubRef, {
             id: 'match_winner',
@@ -132,7 +129,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
           }, { merge: true });
         }
 
-        // Fetch Fancy and Bookmaker Odds (GET)
         const fancyData = await fetchFancyOdds(betfairInfo.eventId, '4');
         if (fancyData) {
           if (fancyData.bookmaker && fancyData.bookmaker.length > 0) {
@@ -163,8 +159,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
           }
         }
 
-        // Fetch Premium Fancy (GET)
-        const premiumData = await fetchPremiumFancy(betfairInfo.eventId, '4');
+        const premiumData = await fetchPremiumFancy(betfairInfo.eventId);
         if (premiumData && Array.isArray(premiumData)) {
           setDoc(doc(db, 'matches', matchData.id, 'markets', 'premium_fancy'), {
             id: 'premium_fancy',
@@ -174,22 +169,23 @@ export async function syncCricketMatchesAction(db: Firestore) {
               id: p.selectionId?.toString() || p.runnerName,
               name: p.runnerName,
               no: p.layPrice || 0,
-              yes: p.backPrice || 0
+              yes: p.backPrice || 0,
+              backPrice: p.backPrice,
+              layPrice: p.layPrice
             }))
           }, { merge: true });
         }
       }
 
-      // Update the main match document (No more duplicates, updates in-place)
       const matchRef = doc(db, 'matches', matchData.id);
       setDoc(matchRef, {
         ...matchData,
+        betfairEventId: betfairInfo?.eventId || null,
         odds: professionalOdds,
         lastUpdated: new Date().toISOString()
       }, { merge: true });
     }
 
-    // 6. Prune Stale Matches (No More, No Less)
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
@@ -201,11 +197,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     });
     if (pruned > 0) await batch.commit();
 
-    return { 
-      success: true, 
-      count: liveMatchesList.length, 
-      pruned 
-    };
+    return { success: true, count: liveMatchesList.length, pruned };
   } catch (error: any) {
     console.error("Discovery Chain Pulse Error:", error);
     return { success: false, error: error.message };
