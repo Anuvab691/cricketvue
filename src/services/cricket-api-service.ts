@@ -100,6 +100,7 @@ export async function fetchBetfairMarkets(eventId: string, sportId: string = '4'
 
 /**
  * Betfair Pulse: Fetches the Market Book (odds/prices) via POST.
+ * Payload must match: {"marketIds": "marketId"}
  */
 export async function fetchMarketBook(marketId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
@@ -137,7 +138,7 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
 }
 
 /**
- * Fetches live series (tournaments) for the specified year using the requested endpoint.
+ * Fetches live series (tournaments) for the specified year.
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
@@ -160,7 +161,7 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
- * Ensures IDs are stable and URL-safe to prevent duplicate entries.
+ * Sanitizes IDs to ensure they are URL-safe and stable for "in-place" updates.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -183,11 +184,10 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = status === 'COMPLETED' || status === 'finished';
   const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play' || !!t1.score;
 
-  // Use the API ID if available, otherwise sanitize the name.
-  // This is critical for preventing duplicate entries in the terminal.
-  let finalId = originalId || match.id?.toString() || `${homeName} v ${awayName}`;
+  // Stable ID Generation: Prioritize match.id, fallback to sanitized names.
+  let finalId = originalId || match.id?.toString() || `${homeName} vs ${awayName}`;
   
-  // Sanitize: Replace spaces and special chars with hyphens, and uppercase for stability
+  // Sanitize: Replace spaces and special chars with hyphens, uppercase for stability.
   finalId = finalId.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toUpperCase();
 
   return {

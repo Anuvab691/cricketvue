@@ -1,6 +1,6 @@
 'use client';
 
-import { Firestore, doc, setDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { 
   fetchLiveMatches, 
   fetchMatchDetail, 
@@ -17,11 +17,7 @@ import {
  */
 export async function syncCricketMatchesAction(db: Firestore, options: { clearFirst?: boolean } = {}) {
   try {
-    if (options.clearFirst) {
-      await clearAllMatchesAction(db);
-    }
-
-    // 1. Sync Series (Tournaments) from the 2026 Feed
+    // 1. Sync Series (Tournaments)
     const seriesList = await fetchLiveSeries();
     for (const series of seriesList) {
       if (!series.id) continue;
@@ -31,16 +27,16 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       }, { merge: true });
     }
 
-    // 2. Sync Live Matches and Betfair Odds
+    // 2. Start Live Match Sync
     const liveMatchesList = await fetchLiveMatches();
-    const competitions = await fetchBetfairCompetitions('4'); // 4 = Cricket
-
-    // Track active IDs to perform "No more no less" pruning
     const activeMatchIds = new Set<string>();
 
+    // Discovery Cache: Fetch competitions once to save API calls
+    const competitions = await fetchBetfairCompetitions('4'); // 4 = Cricket
+
     for (const matchSummary of liveMatchesList) {
-      // Respect trial API rate limits
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Respect API rate limits (Trial Key: ~2 req/sec)
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
       activeMatchIds.add(matchData.id);
@@ -59,7 +55,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         const awayTeam = (matchData.teams?.[1] || '').toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step A: Find competition
+        // Step A: Match competition
         const matchingComp = competitions.find((c: any) => {
           const cName = (c.competition?.name || '').toLowerCase();
           return seriesName.includes(cName) || cName.includes(seriesName) || 
@@ -78,12 +74,14 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
             // Step C: Fetch Markets
             const markets = await fetchBetfairMarkets(matchingEvent.event.id, '4');
             const winnerMarket = markets.find((m: any) => 
-              ['Match Odds', 'Winner', 'Match Betting'].some(term => m.marketName?.includes(term))
+              ['Match Odds', 'Winner', 'Match Betting', 'Match Winner'].some(term => 
+                (m.marketName || '').toLowerCase().includes(term.toLowerCase())
+              )
             );
             
             if (winnerMarket) {
               discoveredMarketId = winnerMarket.marketId;
-              // Step D: Fetch Market Book
+              // Step D: Fetch Live Market Book via POST
               const book = await fetchMarketBook(discoveredMarketId, '4');
               
               if (book && book.runners && book.runners.length >= 2) {
@@ -102,10 +100,10 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           }
         }
       } catch (betfairErr) {
-        // Silent fail on odds
+        // Silent fail on discovery steps to allow score-only sync
       }
 
-      // 4. In-Place Update (Ensures scores refresh without new entries)
+      // 4. In-Place Update: Stable ID ensures no duplicates when score changes
       const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         ...matchData,
@@ -115,7 +113,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         marketId: discoveredMarketId
       }, { merge: true });
 
-      // Update Market Sub-collection
+      // Update Market Sub-collection for the detail view
       const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
       await setDoc(marketSubRef, {
         id: 'match_winner',
@@ -138,7 +136,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       }, { merge: true });
     }
 
-    // 5. "No More No Less" Pruning: Remove matches that are no longer in the live feed
+    // 5. "No More No Less" Pruning: Remove matches that are no longer active in the professional feed
     const existingMatchesSnap = await getDocs(collection(db, 'matches'));
     const pruneBatch = writeBatch(db);
     let prunedCount = 0;
@@ -162,25 +160,6 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
     };
   } catch (error: any) {
     console.error("Professional Sync Error:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Manual Deep Purge: Force clears the terminal feed.
- */
-export async function clearAllMatchesAction(db: Firestore) {
-  try {
-    const matchesSnap = await getDocs(collection(db, 'matches'));
-    const tournamentsSnap = await getDocs(collection(db, 'tournaments'));
-    const batch = writeBatch(db);
-    
-    matchesSnap.docs.forEach(doc => batch.delete(doc.ref));
-    tournamentsSnap.docs.forEach(doc => batch.delete(doc.ref));
-    
-    await batch.commit();
-    return { success: true };
-  } catch (error: any) {
     return { success: false, error: error.message };
   }
 }
