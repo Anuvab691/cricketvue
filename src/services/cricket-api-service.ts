@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview High-Performance Server-Side Service for Sportbex API.
- * Integrated with Betfair Exchange endpoints for live market discovery.
+ * Integrated with Betfair Exchange endpoints for live market discovery and professional odds.
  */
 
 export interface ExternalMatch {
@@ -19,9 +19,11 @@ export interface ExternalMatch {
   teamB: string;
   teams: string[];
   score?: string;
+  currentScore?: string;
   matchStarted: boolean;
   matchEnded: boolean;
   rawStatusText?: string;
+  statusText?: string;
   betfairId?: string;
   marketId?: string;
   odds?: {
@@ -78,7 +80,7 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 }
 
 /**
- * Betfair Discovery Phase 1: Fetches active competitions.
+ * Betfair Discovery Phase 1: Fetches active competitions for a sport (4 = Cricket).
  */
 export async function fetchBetfairCompetitions(sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/${sportId}`);
@@ -86,7 +88,7 @@ export async function fetchBetfairCompetitions(sportId: string = '4') {
 }
 
 /**
- * Betfair Discovery Phase 2: Fetches events for a competition.
+ * Betfair Discovery Phase 2: Fetches events and their associated markets for a competition.
  */
 export async function fetchBetfairEvents(competitionId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/event/${sportId}/${competitionId}`);
@@ -94,22 +96,16 @@ export async function fetchBetfairEvents(competitionId: string, sportId: string 
 }
 
 /**
- * Betfair Discovery Phase 3: Fetches available markets for an event.
+ * Betfair Pulse: Fetches live professional odds using marketIds.
+ * Uses the POST /betfair/market-odds endpoint.
  */
-export async function fetchBetfairMarkets(eventId: string, sportId: string = '4') {
-  const json = await fetchFromSportbex(`betfair/markets/${sportId}/${eventId}`);
-  return json?.data || [];
-}
-
-/**
- * Betfair Pulse: Fetches the Market Book via POST.
- */
-export async function fetchMarketBook(marketId: string, sportId: string = '4') {
-  // STRICT adherence to the required curl format: {"marketIds": "market id"}
-  const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
-    marketIds: marketId 
+export async function fetchMarketOdds(marketIds: string[], sportId: string = '4') {
+  if (!marketIds || marketIds.length === 0) return null;
+  
+  const json = await fetchFromSportbex(`betfair/market-odds`, 'POST', { 
+    marketIds: marketIds 
   });
-  return json?.data?.[0] || null;
+  return json?.data || null;
 }
 
 /**
@@ -145,7 +141,7 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
-    const json = await fetchFromSportbex(`live-score/series?page=1&perPage=10&year=2026`);
+    const json = await fetchFromSportbex(`live-score/series?page=1&perPage=10&year=2025`);
     if (!json || !json.data || !json.data.series) return [];
 
     return json.data.series.map((s: any) => ({
@@ -197,13 +193,15 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     scoreText = t1.score || t2.score;
   } else if (match.score) {
     scoreText = match.score;
+  } else if (match.current_score) {
+    scoreText = match.current_score;
   }
 
   const statusRaw = (match.status || '').toUpperCase();
   const isCompleted = statusRaw === 'COMPLETED' || statusRaw === 'FINISHED';
   const isLive = match.isLive === true || statusRaw === 'LIVE' || statusRaw === 'IN PLAY' || !!t1.score || !!match.current_score;
 
-  // Stable ID Generation (Sanitized for URLs)
+  // Stable ID Generation (Sanitized for URLs and consistent document updates)
   let finalId = originalId || match.id?.toString() || `${homeName}-${awayName}`;
   finalId = finalId.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toUpperCase();
 
@@ -221,9 +219,11 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     teamB: awayName,
     teams: [homeName, awayName],
     score: scoreText,
+    currentScore: scoreText,
     matchStarted: isLive || isCompleted,
     matchEnded: isCompleted,
     rawStatusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled'),
+    statusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled'),
     marketId: match.marketId || null
   };
 }

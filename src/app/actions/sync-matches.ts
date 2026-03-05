@@ -7,13 +7,12 @@ import {
   fetchLiveSeries,
   fetchBetfairCompetitions,
   fetchBetfairEvents,
-  fetchBetfairMarkets,
-  fetchMarketBook
+  fetchMarketOdds
 } from '@/services/cricket-api-service';
 
 /**
- * Precision Sync Engine: Updates matches and professional Betfair odds in real-time.
- * Performs deep discovery down to the Market Book via POST listMarketBook.
+ * Precision Sync Engine: Follows the Betfair Discovery Protocol.
+ * 1. competitions -> 2. events -> 3. marketIds -> 4. market-odds (POST)
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -21,7 +20,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const seriesList = await fetchLiveSeries();
     for (const series of seriesList) {
       if (!series.id) continue;
-      await setDoc(doc(db, 'tournaments', series.id), {
+      setDoc(doc(db, 'tournaments', series.id), {
         ...series,
         lastUpdated: new Date().toISOString()
       }, { merge: true });
@@ -31,8 +30,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const liveMatchesList = await fetchLiveMatches();
     const activeMatchIds = new Set<string>();
 
-    // Discovery Cache: Fetch competitions once
+    // Discovery Cache: Fetch all competitions once (Sport ID 4 = Cricket)
     const competitions = await fetchBetfairCompetitions('4'); 
+
+    // To perform a batch odds fetch, we'll collect all discovered marketIds
+    const matchToMarketMap = new Map<string, string>();
+    const runnerMetadataMap = new Map<string, any[]>();
 
     for (const matchSummary of liveMatchesList) {
       // Respect trial API rate limits
@@ -41,115 +44,125 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
       activeMatchIds.add(matchData.id);
 
-      // Default Odds 
-      let marketOdds = {
-        home: { back: 1.00, lay: 0.00 },
-        away: { back: 1.00, lay: 0.00 }
-      };
-
-      let discoveredMarketId = null;
-      let runnerMapping: any[] = [];
-
-      // 3. Betfair Discovery Chain
+      // Discovery Phase: Competition -> Event -> MarketId
       try {
         const homeTeam = (matchData.teamA || '').toLowerCase();
         const awayTeam = (matchData.teamB || '').toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step A: Find matching competition
+        // Step 1: Find matching competition
         const matchingComp = competitions.find((c: any) => {
           const name = (c.competition?.name || '').toLowerCase();
           return seriesName.includes(name) || name.includes(seriesName);
         });
 
         if (matchingComp) {
-          // Step B: Fetch Events
+          // Step 2: Fetch Events (This endpoint returns events with their marketIds)
           const events = await fetchBetfairEvents(matchingComp.competition.id, '4');
           const matchingEvent = events.find((e: any) => {
             const name = (e.event?.name || '').toLowerCase();
             return name.includes(homeTeam) || name.includes(awayTeam);
           });
 
-          if (matchingEvent) {
-            // Step C: Fetch Markets
-            const markets = await fetchBetfairMarkets(matchingEvent.event.id, '4');
-            const winnerMarket = markets.find((m: any) => 
-              ['Match Odds', 'Winner', 'Match Betting'].some(term => 
+          if (matchingEvent && matchingEvent.markets) {
+            // Step 3: Extract marketId for "Match Odds"
+            const winnerMarket = matchingEvent.markets.find((m: any) => 
+              ['Match Odds', 'Winner', 'Match Betting', 'Winner 2025'].some(term => 
                 (m.marketName || '').toLowerCase().includes(term.toLowerCase())
               )
             );
             
             if (winnerMarket) {
-              discoveredMarketId = winnerMarket.marketId;
-              runnerMapping = winnerMarket.runners || [];
-
-              // Step D: Fetch Live Market Book via POST
-              const book = await fetchMarketBook(discoveredMarketId, '4');
-              
-              if (book && book.runners) {
-                // Precision Match: Link Betfair runners to Team A / Team B by name
-                const homeRunner = book.runners.find((r: any) => {
-                  const meta = runnerMapping.find(m => m.selectionId === r.selectionId);
-                  return (meta?.runnerName || '').toLowerCase().includes(homeTeam);
-                }) || book.runners[0];
-
-                const awayRunner = book.runners.find((r: any) => {
-                  const meta = runnerMapping.find(m => m.selectionId === r.selectionId);
-                  return (meta?.runnerName || '').toLowerCase().includes(awayTeam);
-                }) || book.runners[1];
-
-                marketOdds = {
-                  home: { 
-                    back: homeRunner?.ex?.availableToBack?.[0]?.price || 1.00,
-                    lay: homeRunner?.ex?.availableToLay?.[0]?.price || 0.00
-                  },
-                  away: { 
-                    back: awayRunner?.ex?.availableToBack?.[0]?.price || 1.00,
-                    lay: awayRunner?.ex?.availableToLay?.[0]?.price || 0.00
-                  }
-                };
-              }
+              matchToMarketMap.set(matchData.id, winnerMarket.marketId);
+              // Store runner names for precise price mapping later
+              runnerMetadataMap.set(winnerMarket.marketId, winnerMarket.runners || []);
             }
           }
         }
-      } catch (discoveryErr) {
-        // Fallback to score-only if discovery fails
+      } catch (err) {
+        console.error("Discovery error for match:", matchData.id, err);
       }
 
-      // 4. In-Place Update
+      // Initial match update (with current scores)
       const matchRef = doc(db, 'matches', matchData.id);
-      await setDoc(matchRef, {
+      setDoc(matchRef, {
         ...matchData,
-        currentScore: matchData.score,
-        lastUpdated: new Date().toISOString(),
-        odds: marketOdds,
-        marketId: discoveredMarketId
-      }, { merge: true });
-
-      // Update Market Sub-collection
-      const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
-      await setDoc(marketSubRef, {
-        id: 'match_winner',
-        type: 'match_winner',
-        status: 'open',
-        selections: [
-          { 
-            id: 'home', 
-            name: matchData.teamA, 
-            odds: marketOdds.home.back, 
-            layOdds: marketOdds.home.lay || (marketOdds.home.back > 1 ? marketOdds.home.back + 0.02 : 0)
-          },
-          { 
-            id: 'away', 
-            name: matchData.teamB, 
-            odds: marketOdds.away.back, 
-            layOdds: marketOdds.away.lay || (marketOdds.away.back > 1 ? marketOdds.away.back + 0.02 : 0)
-          }
-        ]
+        lastUpdated: new Date().toISOString()
       }, { merge: true });
     }
 
-    // 5. Cleanup Stale Matches (No more no less)
+    // 3. Phase 4: Fetch Live Market Odds (POST)
+    const allMarketIds = Array.from(matchToMarketMap.values());
+    if (allMarketIds.length > 0) {
+      const allOddsData = await fetchMarketOdds(allMarketIds, '4');
+      
+      if (allOddsData) {
+        for (const [matchId, marketId] of matchToMarketMap.entries()) {
+          const marketBook = allOddsData.find((b: any) => b.marketId === marketId);
+          const runnersMeta = runnerMetadataMap.get(marketId) || [];
+          
+          if (marketBook && marketBook.runners) {
+            const matchData = liveMatchesList.find(m => m.id === matchId);
+            const homeTeam = (matchData?.teamA || '').toLowerCase();
+            const awayTeam = (matchData?.teamB || '').toLowerCase();
+
+            // Precision Match: Link Betfair runners to Team A / Team B by name
+            const homeRunner = marketBook.runners.find((r: any) => {
+              const meta = runnersMeta.find(m => m.selectionId === r.selectionId);
+              return (meta?.runnerName || '').toLowerCase().includes(homeTeam);
+            }) || marketBook.runners[0];
+
+            const awayRunner = marketBook.runners.find((r: any) => {
+              const meta = runnersMeta.find(m => m.selectionId === r.selectionId);
+              return (meta?.runnerName || '').toLowerCase().includes(awayTeam);
+            }) || marketBook.runners[1];
+
+            const marketOdds = {
+              home: { 
+                back: homeRunner?.ex?.availableToBack?.[0]?.price || 1.00,
+                lay: homeRunner?.ex?.availableToLay?.[0]?.price || 0.00
+              },
+              away: { 
+                back: awayRunner?.ex?.availableToBack?.[0]?.price || 1.00,
+                lay: awayRunner?.ex?.availableToLay?.[0]?.price || 0.00
+              }
+            };
+
+            // Update Match with professional odds
+            const matchRef = doc(db, 'matches', matchId);
+            setDoc(matchRef, {
+              odds: marketOdds,
+              marketId: marketId,
+              lastUpdated: new Date().toISOString()
+            }, { merge: true });
+
+            // Update Market Sub-collection for betting UI
+            const marketSubRef = doc(db, 'matches', matchId, 'markets', 'match_winner');
+            setDoc(marketSubRef, {
+              id: 'match_winner',
+              type: 'match_winner',
+              status: 'open',
+              selections: [
+                { 
+                  id: 'home', 
+                  name: matchData?.teamA || 'Home', 
+                  odds: marketOdds.home.back, 
+                  layOdds: marketOdds.home.lay || (marketOdds.home.back > 1 ? marketOdds.home.back + 0.02 : 0)
+                },
+                { 
+                  id: 'away', 
+                  name: matchData?.teamB || 'Away', 
+                  odds: marketOdds.away.back, 
+                  layOdds: marketOdds.away.lay || (marketOdds.away.back > 1 ? marketOdds.away.back + 0.02 : 0)
+                }
+              ]
+            }, { merge: true });
+          }
+        }
+      }
+    }
+
+    // 4. Cleanup Stale Matches (Keep only what's currently in the feed)
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
@@ -168,7 +181,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       pruned 
     };
   } catch (error: any) {
-    console.error("Precision Sync Error:", error);
+    console.error("Betfair Pulse Sync Error:", error);
     return { success: false, error: error.message };
   }
 }
