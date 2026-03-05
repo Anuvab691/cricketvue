@@ -26,6 +26,7 @@ export interface ExternalMatch {
   statusText?: string;
   betfairId?: string;
   marketId?: string;
+  eventId?: string;
   odds?: {
     home: { back: number; lay: number };
     away: { back: number; lay: number };
@@ -105,6 +106,16 @@ export async function fetchMarketOdds(marketIds: string[], sportId: string = '4'
   const json = await fetchFromSportbex(`betfair/market-odds`, 'POST', { 
     marketIds: marketIds 
   });
+  return json?.data || null;
+}
+
+/**
+ * Betfair Fancy Pulse: Fetches live Fancy and Bookmaker odds for a specific event.
+ * Uses the GET /betfair/fancy-bookmaker-odds/{sportId}/{eventId} endpoint.
+ */
+export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
+  if (!eventId) return null;
+  const json = await fetchFromSportbex(`betfair/fancy-bookmaker-odds/${sportId}/${eventId}`);
   return json?.data || null;
 }
 

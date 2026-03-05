@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { placeBetAction } from '@/app/actions/betting';
 import { toast } from '@/hooks/use-toast';
-import { Trophy, Zap, Info } from 'lucide-react';
+import { Trophy, Zap, Info, Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
 import { cn } from '@/lib/utils';
 
@@ -49,6 +49,11 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
   };
 
   const stakeNum = parseFloat(stake) || 0;
+
+  // Market Grouping
+  const matchWinnerMarket = match.markets?.find((m: any) => m.type === 'match_winner');
+  const bookmakerMarket = match.markets?.find((m: any) => m.type === 'bookmaker');
+  const fancyMarket = match.markets?.find((m: any) => m.type === 'fancy');
 
   return (
     <div className="space-y-4">
@@ -96,53 +101,51 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
             </div>
           </div>
 
-          {match.markets?.filter((m: any) => m.type === 'match_winner').map((market: any) => (
-            <div key={market.id} className="divide-y divide-slate-100">
-              {market.selections.map((selection: any) => {
-                const backOdds = selection.odds || 1.0;
-                const layOdds = selection.layOdds || (backOdds > 1 ? backOdds + 0.02 : 0);
-                
-                return (
-                  <div key={selection.id} className="flex items-center justify-between h-14 hover:bg-slate-50 transition-colors">
-                    <div className="px-4 flex flex-col">
-                      <span className="font-black italic uppercase text-slate-800 tracking-tighter text-sm">{selection.name}</span>
-                      <span className="text-[9px] text-red-500 font-bold">-{stakeNum.toFixed(0)}</span>
+          <div className="divide-y divide-slate-100">
+            {matchWinnerMarket?.selections.map((selection: any) => {
+              const backOdds = selection.odds || 1.0;
+              const layOdds = selection.layOdds || (backOdds > 1 ? backOdds + 0.02 : 0);
+              
+              return (
+                <div key={selection.id} className="flex items-center justify-between h-14 hover:bg-slate-50 transition-colors">
+                  <div className="px-4 flex flex-col">
+                    <span className="font-black italic uppercase text-slate-800 tracking-tighter text-sm">{selection.name}</span>
+                    <span className="text-[9px] text-red-500 font-bold">-{stakeNum.toFixed(0)}</span>
+                  </div>
+
+                  <div className="grid grid-cols-6 w-[288px] h-full items-center">
+                    {/* Back Grid */}
+                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds - 0.02, false)}>
+                      <span>{(backOdds - 0.02).toFixed(2)}</span>
+                      <span className="text-[8px] opacity-40">10k</span>
+                    </div>
+                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds - 0.01, false)}>
+                      <span>{(backOdds - 0.01).toFixed(2)}</span>
+                      <span className="text-[8px] opacity-40">50k</span>
+                    </div>
+                    <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds, false)}>
+                      <span className="text-xs">{backOdds.toFixed(2)}</span>
+                      <span className="text-[8px] opacity-40">1.2L</span>
                     </div>
 
-                    <div className="grid grid-cols-6 w-[288px] h-full items-center">
-                      {/* Back Grid */}
-                      <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(market, selection, backOdds - 0.02, false)}>
-                        <span>{(backOdds - 0.02).toFixed(2)}</span>
-                        <span className="text-[8px] opacity-40">10k</span>
-                      </div>
-                      <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(market, selection, backOdds - 0.01, false)}>
-                        <span>{(backOdds - 0.01).toFixed(2)}</span>
-                        <span className="text-[8px] opacity-40">50k</span>
-                      </div>
-                      <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(market, selection, backOdds, false)}>
-                        <span className="text-xs">{backOdds.toFixed(2)}</span>
-                        <span className="text-[8px] opacity-40">1.2L</span>
-                      </div>
-
-                      {/* Lay Grid */}
-                      <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(market, selection, layOdds, true)}>
-                        <span className="text-xs">{layOdds.toFixed(2)}</span>
-                        <span className="text-[8px] opacity-40">45k</span>
-                      </div>
-                      <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(market, selection, layOdds + 0.01, true)}>
-                        <span>{(layOdds + 0.01).toFixed(2)}</span>
-                        <span className="text-[8px] opacity-40">25k</span>
-                      </div>
-                      <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(market, selection, layOdds + 0.02, true)}>
-                        <span>{(layOdds + 0.02).toFixed(2)}</span>
-                        <span className="text-[8px] opacity-40">15k</span>
-                      </div>
+                    {/* Lay Grid */}
+                    <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds, true)}>
+                      <span className="text-xs">{layOdds.toFixed(2)}</span>
+                      <span className="text-[8px] opacity-40">45k</span>
+                    </div>
+                    <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds + 0.01, true)}>
+                      <span>{(layOdds + 0.01).toFixed(2)}</span>
+                      <span className="text-[8px] opacity-40">25k</span>
+                    </div>
+                    <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds + 0.02, true)}>
+                      <span>{(layOdds + 0.02).toFixed(2)}</span>
+                      <span className="text-[8px] opacity-40">15k</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          ))}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Bookmaker Market Section */}
@@ -151,9 +154,29 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
             <span>Bookmaker</span>
             <span className="text-[9px] opacity-50">Min: 100 Max: 100L</span>
           </div>
-          <div className="p-4 text-center text-slate-300 text-[10px] font-bold italic">
-            Bookmaker market suspended - No active liquidity found.
-          </div>
+          {bookmakerMarket ? (
+             <div className="divide-y divide-slate-100">
+               {bookmakerMarket.selections.map((selection: any) => (
+                 <div key={selection.id} className="flex items-center justify-between h-14 hover:bg-slate-50 transition-colors">
+                    <div className="px-4">
+                      <span className="font-black italic uppercase text-slate-800 tracking-tighter text-sm">{selection.name}</span>
+                    </div>
+                    <div className="flex">
+                      <div className="odds-grid-box odds-back w-24 border-r border-slate-200" onClick={() => handlePlaceBet(bookmakerMarket, selection, selection.odds, false)}>
+                        <span className="text-xs">{selection.odds.toFixed(2)}</span>
+                      </div>
+                      <div className="odds-grid-box odds-lay w-24" onClick={() => handlePlaceBet(bookmakerMarket, selection, selection.layOdds, true)}>
+                        <span className="text-xs">{selection.layOdds.toFixed(2)}</span>
+                      </div>
+                    </div>
+                 </div>
+               ))}
+             </div>
+          ) : (
+            <div className="p-4 text-center text-slate-300 text-[10px] font-bold italic">
+              Bookmaker market suspended - No active liquidity found.
+            </div>
+          )}
         </div>
 
         {/* Fancy Markets Section */}
@@ -163,26 +186,26 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
             <Badge variant="outline" className="text-[9px] border-white/20 text-white h-4 font-black">ACTIVE</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-100">
-            {[
-              { name: '10 over run ENG', no: 122, yes: 123 },
-              { name: '15 over run ENG', no: 144, yes: 145 },
-              { name: 'Fall of 5th wkt ENG', no: 163, yes: 164 },
-              { name: 'J Bethell run', no: 65, yes: 66 }
-            ].map((fancy, idx) => (
-              <div key={idx} className="bg-white p-3 flex justify-between items-center group h-12">
-                <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight">{fancy.name}</span>
+            {fancyMarket ? fancyMarket.selections.map((fancy: any, idx: number) => (
+              <div key={idx} className="bg-white p-3 flex justify-between items-center group h-auto min-h-[48px]">
+                <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight max-w-[140px] leading-tight">{fancy.name}</span>
                 <div className="flex gap-1">
-                   <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center">
-                     <span className="text-xs font-black">{fancy.no}</span>
+                   <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center hover:bg-pink-200">
+                     <span className="text-xs font-black">{fancy.no || 0}</span>
                      <span className="text-[8px] font-bold">No</span>
                    </button>
-                   <button className="w-12 h-9 bg-blue-100 border border-blue-200 text-blue-700 rounded-sm flex flex-col items-center justify-center">
-                     <span className="text-xs font-black">{fancy.yes}</span>
+                   <button className="w-12 h-9 bg-blue-100 border border-blue-200 text-blue-700 rounded-sm flex flex-col items-center justify-center hover:bg-blue-200">
+                     <span className="text-xs font-black">{fancy.yes || 0}</span>
                      <span className="text-[8px] font-bold">Yes</span>
                    </button>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="bg-white p-8 text-center w-full col-span-2">
+                 <Loader2 className="animate-spin mx-auto text-slate-200 mb-2" size={24} />
+                 <p className="text-[10px] text-slate-300 font-bold uppercase italic">Syncing live fancy markets...</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

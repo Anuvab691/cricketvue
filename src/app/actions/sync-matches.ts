@@ -7,12 +7,14 @@ import {
   fetchLiveSeries,
   fetchBetfairCompetitions,
   fetchBetfairEvents,
-  fetchMarketOdds
+  fetchMarketOdds,
+  fetchFancyOdds
 } from '@/services/cricket-api-service';
 
 /**
  * Precision Sync Engine: Follows the Betfair Discovery Protocol.
  * 1. competitions -> 2. events -> 3. marketIds -> 4. market-odds (POST)
+ * NEW: Also fetches Fancy/Bookmaker odds via eventId.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -36,6 +38,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     // To perform a batch odds fetch, we'll collect all discovered marketIds
     const matchToMarketMap = new Map<string, string>();
     const runnerMetadataMap = new Map<string, any[]>();
+    const matchToEventMap = new Map<string, string>();
 
     for (const matchSummary of liveMatchesList) {
       // Respect trial API rate limits
@@ -64,18 +67,22 @@ export async function syncCricketMatchesAction(db: Firestore) {
             return name.includes(homeTeam) || name.includes(awayTeam);
           });
 
-          if (matchingEvent && matchingEvent.markets) {
-            // Step 3: Extract marketId for "Match Odds"
-            const winnerMarket = matchingEvent.markets.find((m: any) => 
-              ['Match Odds', 'Winner', 'Match Betting', 'Winner 2025'].some(term => 
-                (m.marketName || '').toLowerCase().includes(term.toLowerCase())
-              )
-            );
+          if (matchingEvent) {
+            matchToEventMap.set(matchData.id, matchingEvent.event.id);
             
-            if (winnerMarket) {
-              matchToMarketMap.set(matchData.id, winnerMarket.marketId);
-              // Store runner names for precise price mapping later
-              runnerMetadataMap.set(winnerMarket.marketId, winnerMarket.runners || []);
+            if (matchingEvent.markets) {
+              // Step 3: Extract marketId for "Match Odds"
+              const winnerMarket = matchingEvent.markets.find((m: any) => 
+                ['Match Odds', 'Winner', 'Match Betting', 'Winner 2025'].some(term => 
+                  (m.marketName || '').toLowerCase().includes(term.toLowerCase())
+                )
+              );
+              
+              if (winnerMarket) {
+                matchToMarketMap.set(matchData.id, winnerMarket.marketId);
+                // Store runner names for precise price mapping later
+                runnerMetadataMap.set(winnerMarket.marketId, winnerMarket.runners || []);
+              }
             }
           }
         }
@@ -162,7 +169,50 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }
     }
 
-    // 4. Cleanup Stale Matches (Keep only what's currently in the feed)
+    // 4. NEW Phase: Fetch Fancy and Bookmaker Odds (GET)
+    for (const [matchId, eventId] of matchToEventMap.entries()) {
+      try {
+        const fancyData = await fetchFancyOdds(eventId, '4');
+        if (fancyData && (fancyData.fancy || fancyData.bookmaker)) {
+          // Store Bookmaker Odds
+          if (fancyData.bookmaker && fancyData.bookmaker.length > 0) {
+            const bookmakerMarketRef = doc(db, 'matches', matchId, 'markets', 'bookmaker');
+            setDoc(bookmakerMarketRef, {
+              id: 'bookmaker',
+              type: 'bookmaker',
+              status: 'open',
+              selections: fancyData.bookmaker.map((b: any) => ({
+                id: b.selectionId?.toString() || b.runnerName,
+                name: b.runnerName,
+                odds: b.backPrice || 1.00,
+                layOdds: b.layPrice || 0.00
+              }))
+            }, { merge: true });
+          }
+
+          // Store Fancy Odds
+          if (fancyData.fancy && fancyData.fancy.length > 0) {
+            const fancyMarketRef = doc(db, 'matches', matchId, 'markets', 'fancy');
+            setDoc(fancyMarketRef, {
+              id: 'fancy',
+              type: 'fancy',
+              status: 'open',
+              selections: fancyData.fancy.map((f: any) => ({
+                id: f.selectionId?.toString() || f.runnerName,
+                name: f.runnerName,
+                no: f.layPrice || 0,
+                yes: f.backPrice || 0,
+                status: f.gameStatus || 'active'
+              }))
+            }, { merge: true });
+          }
+        }
+      } catch (err) {
+        console.error("Fancy odds fetch error for match:", matchId, err);
+      }
+    }
+
+    // 5. Cleanup Stale Matches (Keep only what's currently in the feed)
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
