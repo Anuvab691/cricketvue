@@ -51,6 +51,7 @@ export interface NormalizedMarketBook {
   runners: {
     selectionId: number;
     runnerName?: string;
+    runnerStatus?: string;
     back: { price: number; size: number }[];
     lay: { price: number; size: number }[];
     lastPriceTraded: number | null;
@@ -85,7 +86,7 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 
 /**
  * Professional implementation to fetch market odds via listMarketBook.
- * Implements the normalized transformer to ensure UI receives clean data.
+ * Uses ONLY market-level status for suspension logic.
  */
 export async function fetchMarketOdds(marketId: string): Promise<NormalizedMarketBook | null> {
   const apiKey = process.env.SPORTBEX_API_KEY || API_KEY;
@@ -116,30 +117,29 @@ export async function fetchMarketOdds(marketId: string): Promise<NormalizedMarke
     }
 
     const json = await res.json();
-    console.log("Sportbex raw status:", json.status);
-
     const data = json.data?.[0];
-    if (!data) return null;
+    
+    if (!data) {
+      console.log(`No market data found for ID: ${marketId}`);
+      return null;
+    }
 
-    console.log(`Market Pulse [${marketId}]:`, {
-      status: data.status,
-      inplay: data.inplay,
-      totalMatched: data.totalMatched
-    });
-
+    // Professional Debug Logs
+    console.log("Market status:", data.status, "inplay:", !!data.inplay, "totalMatched:", data.totalMatched);
     if (data.runners?.[0]) {
-      console.log("marketBook sample runner.ex:", JSON.stringify(data.runners[0].ex, null, 2));
+      console.log("Runner ex:", JSON.stringify(data.runners[0].ex, null, 2));
     }
 
     // Professional Normalization Transformer
     const normalized: NormalizedMarketBook = {
       marketId: data.marketId,
-      status: data.status,
+      status: data.status, // ONLY use this for suspension UI
       inplay: !!data.inplay,
       totalMatched: data.totalMatched || 0,
       runners: (data.runners || []).map((runner: any) => ({
         selectionId: runner.selectionId,
         runnerName: runner.runnerName,
+        runnerStatus: runner.status, // Kept separately for debugging
         lastPriceTraded: runner.lastPriceTraded ?? null,
         back: (runner.ex?.availableToBack || []).slice(0, 3).map((b: any) => ({
           price: b.price || 0,

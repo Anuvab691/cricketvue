@@ -47,7 +47,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
         const e = betfairEvent.event;
         if (!e || !e.name) continue;
 
-        // Link Sportbex match to Betfair Event
         const matchedMatch = liveMatchesList.find(m => {
           const mName = (m.name || '').toLowerCase();
           const eName = (e.name || '').toLowerCase();
@@ -57,15 +56,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
         });
 
         if (matchedMatch) {
-          // SELECT MARKET: Strengthened selection logic
+          // SELECT MARKET: Prioritize Match Odds, Match Winner, or Winner
           const targetMarketNames = ['match odds', 'match winner', 'winner'];
           let market = betfairEvent.markets?.find((m: any) => 
             targetMarketNames.some(name => (m.marketName || '').toLowerCase().includes(name))
           );
 
           if (!market && betfairEvent.markets?.length > 0) {
-            console.log(`Preferred market not found for ${e.name}. Markets available:`, 
-              betfairEvent.markets.map((m: any) => m.marketName).join(', '));
             market = betfairEvent.markets[0];
           }
 
@@ -92,22 +89,20 @@ export async function syncCricketMatchesAction(db: Firestore) {
         // Phase 3: High-Frequency Pulse (listMarketBook POST)
         const marketBook = await fetchMarketOdds(betfairInfo.marketId);
 
-        if (marketBook && marketBook.runners && marketBook.runners.length >= 2) {
-          // Professional Runner Mapping
-          const runner1 = marketBook.runners[0];
-          const runner2 = marketBook.runners[1];
-
+        if (marketBook && marketBook.runners) {
+          // Mapping runners to teams for precision
+          const runners = marketBook.runners;
           professionalOdds = {
-            status: marketBook.status,
+            status: marketBook.status, // Market-level status
             home: { 
-              back: runner1.back?.[0]?.price || 1.00,
-              lay: runner1.lay?.[0]?.price || 0.00,
-              lastPrice: runner1.lastPriceTraded
+              back: runners[0]?.back?.[0]?.price || 1.00,
+              lay: runners[0]?.lay?.[0]?.price || 0.00,
+              lastPrice: runners[0]?.lastPriceTraded
             },
             away: { 
-              back: runner2.back?.[0]?.price || 1.00,
-              lay: runner2.lay?.[0]?.price || 0.00,
-              lastPrice: runner2.lastPriceTraded
+              back: runners[1]?.back?.[0]?.price || 1.00,
+              lay: runners[1]?.lay?.[0]?.price || 0.00,
+              lastPrice: runners[1]?.lastPriceTraded
             }
           };
 
@@ -136,25 +131,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
             setDoc(doc(db, 'matches', matchData.id, 'markets', 'bookmaker'), {
               id: 'bookmaker',
               type: 'bookmaker',
-              status: 'open',
+              status: 'OPEN',
               selections: fancyData.bookmaker.map((b: any) => ({
                 id: b.selectionId?.toString() || b.runnerName,
                 name: b.runnerName,
                 odds: b.backPrice || 1.00,
                 layOdds: b.layPrice || 0.00
-              }))
-            }, { merge: true });
-          }
-          if (fancyData.fancy && fancyData.fancy.length > 0) {
-            setDoc(doc(db, 'matches', matchData.id, 'markets', 'fancy'), {
-              id: 'fancy',
-              type: 'fancy',
-              status: 'open',
-              selections: fancyData.fancy.map((f: any) => ({
-                id: f.selectionId?.toString() || f.runnerName,
-                name: f.runnerName,
-                no: f.layPrice || 0,
-                yes: f.backPrice || 0
               }))
             }, { merge: true });
           }
@@ -166,7 +148,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
           setDoc(doc(db, 'matches', matchData.id, 'markets', 'premium_fancy'), {
             id: 'premium_fancy',
             type: 'premium_fancy',
-            status: 'open',
+            status: 'OPEN',
             selections: premiumData.map((p: any) => ({
               id: p.selectionId?.toString() || p.runnerName,
               name: p.runnerName,
