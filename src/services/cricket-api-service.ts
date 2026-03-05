@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview High-Performance Server-Side Service for Sportbex API.
- * Optimized for the high-fidelity JSON schema provided for live matches and series.
+ * Integrated with Betfair Exchange endpoints for live market data.
  */
 
 export interface ExternalMatch {
@@ -19,6 +19,12 @@ export interface ExternalMatch {
   matchStarted: boolean;
   matchEnded: boolean;
   rawStatusText?: string;
+  betfairId?: string;
+  marketId?: string;
+  odds?: {
+    home: { back: number; lay: number };
+    away: { back: number; lay: number };
+  };
 }
 
 export interface ExternalSeries {
@@ -32,34 +38,29 @@ export interface ExternalSeries {
 }
 
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
+const API_KEY = process.env.SPORTBEX_API_KEY || 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
 
 /**
  * Core fetcher utilizing header-based authentication for Sportbex.
  */
-async function fetchFromSportbex(endpoint: string) {
-  const apiKey = process.env.SPORTBEX_API_KEY || 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
-  if (!apiKey) {
-    console.warn("Sportbex API Key Missing: Ensure SPORTBEX_API_KEY is in .env");
-    return null;
-  }
-
+async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: any) {
   const cleanEndpoint = endpoint.replace(/^\//, '');
   const url = `${SPORTBEX_BASE_URL}${cleanEndpoint}`;
 
   try {
-    const response = await fetch(url, {
+    const options: RequestInit = {
+      method,
       cache: 'no-store',
       headers: { 
-        'sportbex-api-key': apiKey,
-        'Accept': 'application/json' 
+        'sportbex-api-key': API_KEY,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
       }
-    });
-    
-    if (response.status === 401 || response.status === 403) {
-      console.warn("Sportbex Auth Error: Unauthorized access.");
-      return null;
-    }
+    };
 
+    if (body) options.body = JSON.stringify(body);
+
+    const response = await fetch(url, options);
     if (!response.ok) return null;
 
     return await response.json();
@@ -70,17 +71,47 @@ async function fetchFromSportbex(endpoint: string) {
 }
 
 /**
+ * Betfair Discovery: Fetches active Cricket competitions (Sport ID: 4).
+ */
+export async function fetchBetfairCompetitions() {
+  const json = await fetchFromSportbex(`betfair/4`);
+  return json?.data || [];
+}
+
+/**
+ * Betfair Discovery: Fetches events for a specific competition.
+ */
+export async function fetchBetfairEvents(competitionId: string) {
+  const json = await fetchFromSportbex(`betfair/event/4/${competitionId}`);
+  return json?.data || [];
+}
+
+/**
+ * Betfair Discovery: Fetches markets for a specific event.
+ */
+export async function fetchBetfairMarkets(eventId: string) {
+  const json = await fetchFromSportbex(`betfair/markets/4/${eventId}`);
+  return json?.data || [];
+}
+
+/**
+ * Betfair Pulse: Fetches the market book (odds) for specific market IDs.
+ */
+export async function fetchMarketBook(marketId: string) {
+  const json = await fetchFromSportbex(`betfair/listMarketBook/4`, 'POST', { marketIds: marketId });
+  return json?.data?.[0] || null;
+}
+
+/**
  * Fetches high-level list of all live matches from the network pulse.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
-
     const matchesArray = Array.isArray(json.data) ? json.data : (json.data?.matches || []);
     return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
-    console.error("Sportbex Live Pulse Fetch Failed:", e);
     return [];
   }
 }
@@ -92,16 +123,14 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
   try {
     const json = await fetchFromSportbex(`live-score/match/${matchId}`);
     if (!json || !json.data) return null;
-
     return transformSportbexLiveMatch(json.data, matchId);
   } catch (e) {
-    console.error(`Sportbex Detail Fetch Failed for ${matchId}:`, e);
     return null;
   }
 }
 
 /**
- * Fetches live series (tournaments) from the network using the requested pulse URL.
+ * Fetches live series (tournaments) from the network.
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
@@ -118,7 +147,6 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
       resultText: s.status_text || s.result?.message || null
     }));
   } catch (e) {
-    console.error("Sportbex Live Series Fetch Failed:", e);
     return [];
   }
 }
@@ -131,14 +159,12 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const t1 = teamsData.t1 || {};
   const t2 = teamsData.t2 || {};
 
-  const homeName = t1.name || match.home_team_name || match.teama || 'TBA';
-  const awayName = t2.name || match.away_team_name || match.teamb || 'TBA';
+  const homeName = t1.name || match.home_team_name || 'TBA';
+  const awayName = t2.name || match.away_team_name || 'TBA';
   
   let scoreText = '';
   if (t1.score && t2.score) {
     scoreText = `${homeName}: ${t1.score} | ${awayName}: ${t2.score}`;
-  } else if (t1.score || t2.score) {
-    scoreText = `${t1.score || '0/0'} vs ${t2.score || '0/0'}`;
   } else if (match.score) {
     scoreText = match.score;
   }
@@ -146,32 +172,22 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = match.status === 'COMPLETED' || match.status === 'finished';
   const isLive = match.isLive === true || match.status === 'LIVE' || match.status === 'In Play';
 
-  let finalId = originalId || match.id?.toString() || match.matchId?.toString();
-
-  if (!finalId && match.seriesId && match.name) {
-    const safeName = match.name.toString().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
-    finalId = `${match.seriesId}-${safeName}`.toUpperCase();
-  }
-  
-  if (!finalId) {
-    finalId = Math.random().toString(36).substr(2, 9);
-  } else {
-    finalId = finalId.replace(/\s+/g, '-');
-  }
+  let finalId = originalId || match.id?.toString();
+  if (finalId) finalId = finalId.replace(/\s+/g, '-');
 
   return {
-    id: finalId,
+    id: finalId || Math.random().toString(36).substr(2, 9),
     name: match.name || `${homeName} v ${awayName}`,
     matchType: match.format || 'cricket',
     status: isCompleted ? 'finished' : (isLive ? 'live' : 'upcoming'),
     venue: match.ground || match.venue || 'Global Stadium',
     date: match.startDate || match.date || new Date().toISOString(),
-    series: match.seriesName || match.series || 'International Series',
+    series: match.seriesName || 'International Series',
     seriesId: match.seriesId?.toString(),
     teams: [homeName, awayName],
     score: scoreText,
     matchStarted: isLive || isCompleted,
     matchEnded: isCompleted,
-    rawStatusText: match.result?.message || match.status_text || match.status || (isLive ? 'In Play' : 'Scheduled')
+    rawStatusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled')
   };
 }
