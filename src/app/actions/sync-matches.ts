@@ -26,20 +26,17 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }, { merge: true });
     }
 
-    // 2. Betfair Discovery Pulse
+    // 2. Initial Data Gathering
+    const liveMatchesList = await fetchLiveMatches();
     const competitions = await fetchBetfairCompetitions();
-    const liveMatches = await fetchLiveMatches();
 
     let syncedCount = 0;
-    for (const match of liveMatches) {
-      // Trial Key Rate-Limit Protection (1.2s delay)
+    for (const matchSummary of liveMatchesList) {
+      // Trial Key Rate-Limit Protection (1.2s delay between matches)
       await new Promise(resolve => setTimeout(resolve, 1200));
       
-      if (!match.id) continue;
-      
-      // Targeted Deep-Sync for scores
-      const detail = await fetchMatchDetail(match.id);
-      const matchData = detail || match;
+      // Fetch deep detail for the t1/t2 structure
+      const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
 
       // Default Odds Schema (Fallback)
       let marketOdds = {
@@ -47,28 +44,35 @@ export async function syncCricketMatchesAction(db: Firestore) {
         away: { back: 1.90, lay: 1.92 }
       };
 
-      // 3. Betfair Market Discovery Chain
+      // 3. Betfair Discovery Chain with Fuzzy Matching
       try {
-        const matchingComp = competitions.find((c: any) => 
-          matchData.series?.toLowerCase().includes(c.competition?.name?.toLowerCase()) ||
-          c.competition?.name?.toLowerCase().includes(matchData.series?.toLowerCase())
-        );
+        const homeTeam = matchData.teams[0].toLowerCase();
+        const awayTeam = matchData.teams[1].toLowerCase();
+        const seriesName = (matchData.series || '').toLowerCase();
+
+        // Step A: Find competition
+        const matchingComp = competitions.find((c: any) => {
+          const cName = (c.competition?.name || '').toLowerCase();
+          return seriesName.includes(cName) || cName.includes(seriesName);
+        });
 
         if (matchingComp) {
+          // Step B: Find event in competition
           const events = await fetchBetfairEvents(matchingComp.competition.id);
-          const matchingEvent = events.find((e: any) => 
-            e.event.name.toLowerCase().includes(matchData.teams[0].toLowerCase()) ||
-            e.event.name.toLowerCase().includes(matchData.teams[1].toLowerCase())
-          );
+          const matchingEvent = events.find((e: any) => {
+            const eName = (e.event?.name || '').toLowerCase();
+            return eName.includes(homeTeam) || eName.includes(awayTeam);
+          });
 
           if (matchingEvent) {
+            // Step C: Find markets for event
             const markets = await fetchBetfairMarkets(matchingEvent.event.id);
             const winnerMarket = markets.find((m: any) => m.marketName === 'Match Odds');
             
             if (winnerMarket) {
+              // Step D: Fetch live book for market
               const book = await fetchMarketBook(winnerMarket.marketId);
               if (book && book.runners && book.runners.length >= 2) {
-                // Extract proper Back and Lay odds from the Betfair Pulse
                 marketOdds = {
                   home: { 
                     back: book.runners[0]?.ex?.availableToBack?.[0]?.price || 1.90,
@@ -84,19 +88,19 @@ export async function syncCricketMatchesAction(db: Firestore) {
           }
         }
       } catch (betfairErr) {
-        console.warn(`Betfair Sync skipped for ${matchData.name}:`, betfairErr);
+        console.warn(`Betfair Chain interrupted for ${matchData.name}:`, betfairErr);
       }
 
       // 4. Persistence Phase
       const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         ...matchData,
-        currentScore: matchData.score, // Map for UI consistency
+        currentScore: matchData.score,
         lastUpdated: new Date().toISOString(),
         odds: marketOdds
       }, { merge: true });
 
-      // Create Market sub-collection for granular betting
+      // Market sub-collection for granular betting
       const marketRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
       await setDoc(marketRef, {
         id: 'match_winner',
@@ -113,7 +117,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     return { success: true, count: syncedCount, tournamentsCount: seriesList.length };
   } catch (error: any) {
-    console.error("Terminal Sync Engine Failure:", error);
+    console.error("Terminal Sync Engine Critical Failure:", error);
     return { success: false, error: error.message };
   }
 }

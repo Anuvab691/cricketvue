@@ -109,10 +109,12 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
-    // Handle both array and object response variations
-    const matchesArray = Array.isArray(json.data) ? json.data : (json.data?.matches || []);
+    
+    // Handle variations in response format
+    const matchesArray = Array.isArray(json.data) ? json.data : (json.data.matches || []);
     return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
+    console.error("Fetch Live Matches Error:", e);
     return [];
   }
 }
@@ -126,6 +128,7 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
     if (!json || !json.data) return null;
     return transformSportbexLiveMatch(json.data, matchId);
   } catch (e) {
+    console.error(`Fetch Match Detail Error [${matchId}]:`, e);
     return null;
   }
 }
@@ -148,13 +151,14 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
       resultText: s.status_text || s.result?.message || null
     }));
   } catch (e) {
+    console.error("Fetch Live Series Error:", e);
     return [];
   }
 }
 
 /**
  * Transforms Sportbex Live Match schema into Terminal Match schema.
- * Now handles the t1/t2 structure provided in your JSON example.
+ * Precision mapping for t1/t2 structure.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -165,23 +169,22 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const awayName = t2.name || match.away_team_name || match.teamB || 'TBA';
   
   let scoreText = '';
-  if (t1.score && t2.score) {
-    scoreText = `${homeName}: ${t1.score} | ${awayName}: ${t2.score}`;
+  if (t1.score || t2.score) {
+    scoreText = `${homeName}: ${t1.score || '0/0'} | ${awayName}: ${t2.score || '0/0'}`;
   } else if (match.score) {
     scoreText = match.score;
   }
 
-  const isCompleted = match.status === 'COMPLETED' || match.status === 'finished';
-  const isLive = match.isLive === true || match.status === 'LIVE' || match.status === 'In Play';
+  const status = match.status || '';
+  const isCompleted = status === 'COMPLETED' || status === 'finished';
+  const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play';
 
-  // Sanitize IDs: Decode URI and replace spaces with hyphens for clean Firestore Doc IDs and URLs
-  let finalId = originalId || match.id?.toString();
-  if (finalId) {
-    finalId = decodeURIComponent(finalId).replace(/\s+/g, '-');
-  }
+  // Sanitize IDs: Replace spaces with hyphens for clean URLs and Firestore compatibility
+  let finalId = originalId || match.id?.toString() || Math.random().toString(36).substr(2, 9);
+  finalId = decodeURIComponent(finalId).replace(/\s+/g, '-');
 
   return {
-    id: finalId || Math.random().toString(36).substr(2, 9),
+    id: finalId,
     name: match.name || `${homeName} v ${awayName}`,
     matchType: match.format || 'cricket',
     status: isCompleted ? 'finished' : (isLive ? 'live' : 'upcoming'),

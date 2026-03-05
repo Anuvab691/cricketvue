@@ -26,11 +26,13 @@ export function MatchRow({ match }: { match: any }) {
     return () => clearInterval(interval);
   }, [match.lastUpdated]);
 
+  const matchId = match.id ? encodeURIComponent(match.id) : '';
+
   return (
     <div className="match-row group">
       <div className="flex-1 flex flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <Link href={`/match/${encodeURIComponent(match.id)}`} className="font-bold text-slate-800 hover:text-primary transition-colors cursor-pointer">
+          <Link href={`/match/${matchId}`} className="font-bold text-slate-800 hover:text-primary transition-colors cursor-pointer">
             {match.teams?.[0] || 'TBA'} v {match.teams?.[1] || 'TBA'}
           </Link>
           <span className="text-[10px] text-slate-400">/ {format(matchDate, 'dd/MM/yyyy HH:mm')}</span>
@@ -60,7 +62,7 @@ export function MatchRow({ match }: { match: any }) {
 
       <div className="w-[180px] flex justify-around">
         {/* Home Team Betfair Pulse */}
-        <Link href={`/match/${encodeURIComponent(match.id)}`} className="flex gap-0.5">
+        <Link href={`/match/${matchId}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
             <span>{homeBack.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
@@ -81,13 +83,13 @@ export function MatchRow({ match }: { match: any }) {
         </div>
 
         {/* Away Team Betfair Pulse */}
-        <Link href={`/match/${encodeURIComponent(match.id)}`} className="flex gap-0.5">
+        <Link href={`/match/${matchId}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
             <span>{awayBack.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
           <div className="odds-box odds-pink">
-            <span>{awayLay.toFixed(2)}</span>
+            <span>( {awayLay.toFixed(2)} )</span>
             <span className="text-[8px] opacity-70">0</span>
           </div>
         </Link>
