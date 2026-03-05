@@ -12,9 +12,8 @@ import {
 } from '@/services/cricket-api-service';
 
 /**
- * Precision Sync Engine: Follows the Betfair Discovery Protocol.
- * 1. competitions -> 2. events -> 3. marketIds -> 4. market-odds (POST)
- * NEW: Also fetches Fancy/Bookmaker odds via eventId.
+ * Precision Sync Engine: Follows the Betfair listMarketBook Protocol.
+ * 1. competitions -> 2. events -> 3. marketIds -> 4. listMarketBook (POST)
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -41,8 +40,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const matchToEventMap = new Map<string, string>();
 
     for (const matchSummary of liveMatchesList) {
-      // Respect trial API rate limits
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Respect trial API rate limits with a small delay
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
       activeMatchIds.add(matchData.id);
@@ -98,14 +97,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }, { merge: true });
     }
 
-    // 3. Phase 4: Fetch Live Market Odds (POST)
+    // 3. Phase 4: Fetch Live Market Books (POST listMarketBook)
     const allMarketIds = Array.from(matchToMarketMap.values());
     if (allMarketIds.length > 0) {
-      const allOddsData = await fetchMarketOdds(allMarketIds, '4');
+      const allBooks = await fetchMarketOdds(allMarketIds, '4');
       
-      if (allOddsData) {
+      if (allBooks && Array.isArray(allBooks)) {
         for (const [matchId, marketId] of matchToMarketMap.entries()) {
-          const marketBook = allOddsData.find((b: any) => b.marketId === marketId);
+          const marketBook = allBooks.find((b: any) => b.marketId === marketId);
           const runnersMeta = runnerMetadataMap.get(marketId) || [];
           
           if (marketBook && marketBook.runners) {
@@ -212,7 +211,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }
     }
 
-    // 5. Cleanup Stale Matches (Keep only what's currently in the feed)
+    // 5. Cleanup Stale Matches (Keep only what's currently in the feed - "No more, no less")
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
