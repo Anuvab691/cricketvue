@@ -1,8 +1,8 @@
 'use server';
 
 /**
- * @fileOverview High-Performance Server-Side Service for Sportbex Cricket API.
- * Optimized for real-time score construction and professional exchange odds.
+ * @fileOverview High-Performance Server-Side Service for Sportbex Betfair API.
+ * Optimized for professional exchange data flow: Competitions -> Events -> Odds.
  */
 
 export interface ExternalMatch {
@@ -37,28 +37,33 @@ export interface ExternalTournament {
   type: string;
 }
 
-const SPORTBEX_BASE_URL = "https://api.sportbex.com/v1/cricket/";
+const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
+const CRICKET_SPORT_ID = "4";
 
 /**
- * Core fetcher utilizing 'no-store' to ensure zero caching for live Sportbex data.
+ * Core fetcher utilizing header-based authentication for Sportbex.
  */
 async function fetchFromSportbex(endpoint: string) {
   const apiKey = process.env.SPORTBEX_API_KEY;
   if (!apiKey) {
+    console.warn("Sportbex API Key Missing: Ensure SPORTBEX_API_KEY is in .env");
     return null;
   }
 
   const cleanEndpoint = endpoint.replace(/^\//, '');
-  const url = `${SPORTBEX_BASE_URL}${cleanEndpoint}?api_key=${apiKey}`;
+  const url = `${SPORTBEX_BASE_URL}${cleanEndpoint}`;
 
   try {
     const response = await fetch(url, {
       cache: 'no-store',
-      headers: { 'Accept': 'application/json' }
+      headers: { 
+        'sportbex-api-key': apiKey,
+        'Accept': 'application/json' 
+      }
     });
     
     if (response.status === 401 || response.status === 403) {
-      console.warn("Sportbex Auth Error: Verify your SPORTBEX_API_KEY.");
+      console.warn("Sportbex Auth Error: Unauthorized access.");
       return null;
     }
 
@@ -71,38 +76,20 @@ async function fetchFromSportbex(endpoint: string) {
   }
 }
 
-export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
-  try {
-    const json = await fetchFromSportbex('live');
-    if (!json || !json.data) return [];
-    return json.data.map(transformSportbexMatch);
-  } catch (e) {
-    return [];
-  }
-}
-
-export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
-  const date = dateString || new Date().toISOString().split('T')[0];
-  try {
-    const json = await fetchFromSportbex(`schedule/${date}`);
-    if (!json || !json.data) return [];
-    return json.data.map(transformSportbexMatch);
-  } catch (e) {
-    return [];
-  }
-}
-
+/**
+ * Fetches Cricket competitions (Step 1 of Sportbex flow).
+ */
 export async function fetchCompetitions(): Promise<ExternalTournament[]> {
   try {
-    const json = await fetchFromSportbex('competitions');
+    const json = await fetchFromSportbex(`betfair/competitions/${CRICKET_SPORT_ID}`);
     if (!json || !json.data) return [];
     
     return json.data.map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      category: c.category_name || 'International',
-      gender: c.gender || 'men',
-      type: c.type || 'league'
+      id: c.id?.toString(),
+      name: c.name || 'Unknown Series',
+      category: 'Betfair',
+      gender: 'men',
+      type: 'league'
     }));
   } catch (e) {
     return [];
@@ -110,50 +97,79 @@ export async function fetchCompetitions(): Promise<ExternalTournament[]> {
 }
 
 /**
- * Transforms raw Sportbex JSON into our unified Exchange Match schema.
+ * Fetches Live Matches by crawling competitions (Step 2 of Sportbex flow).
  */
-function transformSportbexMatch(match: any): ExternalMatch {
-  const homeName = match.home_team?.name || 'TBA';
-  const awayName = match.away_team?.name || 'TBA';
+export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
+  try {
+    // 1. Get Competitions
+    const competitionsJson = await fetchFromSportbex(`betfair/competitions/${CRICKET_SPORT_ID}`);
+    if (!competitionsJson || !competitionsJson.data) return [];
 
-  const rawStatus = (match.status || 'not_started').toLowerCase();
-  const matchEnded = ['finished', 'completed', 'result'].includes(rawStatus);
-  const matchStarted = !['upcoming', 'scheduled', 'postponed'].includes(rawStatus);
+    let allMatches: ExternalMatch[] = [];
 
-  let status: string = 'upcoming';
-  if (matchEnded) status = 'finished';
-  else if (matchStarted || rawStatus === 'live' || rawStatus === 'in_play') status = 'live';
+    // 2. Fetch events for each competition (Sequential with small delay for rate limits)
+    for (const comp of competitionsJson.data) {
+      if (!comp.id) continue;
+      
+      const eventsJson = await fetchFromSportbex(`betfair/event/${CRICKET_SPORT_ID}/${comp.id}`);
+      
+      if (eventsJson && eventsJson.data) {
+        const transformed = eventsJson.data.map((event: any) => transformSportbexMatch(event, comp.name));
+        allMatches.push(...transformed);
+      }
+      
+      // Delay 100ms to be safe with trial keys
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
 
-  // Sportbex usually provides direct probabilities or implicit market data
-  const probabilities = {
-    home: match.win_probability_home || 50,
-    away: match.win_probability_away || 50,
-  };
-  
-  return {
-    id: match.id?.toString() || Math.random().toString(),
-    name: `${homeName} vs ${awayName}`,
-    matchType: match.match_type || 't20',
-    status,
-    venue: match.venue || 'Global Stadium',
-    date: match.start_date || new Date().toISOString(),
-    series: match.competition_name || 'International Series',
-    seriesId: match.competition_id?.toString(),
-    teams: [homeName, awayName],
-    score: parseSportbexScore(match),
-    matchStarted,
-    matchEnded,
-    rawStatusText: match.status_note || rawStatus,
-    probabilities
-  };
+    return allMatches;
+  } catch (e) {
+    console.error("Sportbex Live Fetch Failed:", e);
+    return [];
+  }
 }
 
-function parseSportbexScore(match: any) {
-  if (!match.score_home && !match.score_away) return undefined;
-  
-  const scores: any[] = [];
-  if (match.score_home) scores.push({ inning: match.home_team?.name || 'Home', r: match.score_home });
-  if (match.score_away) scores.push({ inning: match.away_team?.name || 'Away', r: match.score_away });
+/**
+ * Not directly available in Betfair endpoints, but we can simulate via date filtering
+ * on active events or competition crawls.
+ */
+export async function fetchDailySchedule(dateString?: string): Promise<ExternalMatch[]> {
+  // For Sportbex Betfair flow, we typically get all active events via competition crawl.
+  // We filter by date if provided.
+  const matches = await fetchLiveMatches();
+  if (!dateString) return matches;
 
-  return scores.length > 0 ? scores : undefined;
+  return matches.filter(m => m.date.startsWith(dateString));
+}
+
+/**
+ * Transforms Betfair Event schema into Exchange Match schema.
+ * Sportbex Betfair events use 'eventName' and 'marketId'.
+ */
+function transformSportbexMatch(event: any, competitionName: string): ExternalMatch {
+  const eventName = event.eventName || 'TBA v TBA';
+  // Split "Team A v Team B" or "Team A vs Team B"
+  const teams = eventName.split(/ v | vs /i).map((t: string) => t.trim());
+  const homeName = teams[0] || 'TBA';
+  const awayName = teams[1] || 'TBA';
+
+  return {
+    id: event.id?.toString() || event.marketId || Math.random().toString(),
+    name: eventName,
+    matchType: 'cricket',
+    status: 'live',
+    venue: event.venue || 'Global Stadium',
+    date: event.openDate || new Date().toISOString(),
+    series: competitionName || 'International Series',
+    seriesId: event.competitionId?.toString(),
+    teams: [homeName, awayName],
+    score: undefined, // Betfair Basic event endpoint usually doesn't provide live scores
+    matchStarted: true,
+    matchEnded: false,
+    rawStatusText: 'In Play',
+    probabilities: {
+      home: 50,
+      away: 50
+    }
+  };
 }

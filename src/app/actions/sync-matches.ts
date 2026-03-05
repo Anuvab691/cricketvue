@@ -1,11 +1,11 @@
 'use client';
 
 import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc } from 'firebase/firestore';
-import { fetchLiveMatches, fetchDailySchedule, fetchCompetitions } from '@/services/cricket-api-service';
+import { fetchLiveMatches, fetchCompetitions } from '@/services/cricket-api-service';
 
 /**
- * Synchronizes live/upcoming matches AND tournaments from Sportbex to Firestore.
- * High-frequency synchronization for professional exchange terminals.
+ * Synchronizes matches and tournaments from Sportbex to Firestore using Betfair flow.
+ * Professional-grade sync engine with anti-collision protection.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -17,119 +17,64 @@ export async function syncCricketMatchesAction(db: Firestore) {
       if (data.syncStatus === 'clearing') return { success: false, reason: 'clearing' };
       const lastSync = data.lastGlobalSync ? new Date(data.lastGlobalSync).getTime() : 0;
       
-      // Auto-sync protection: ensure at least 10s between network pulses
-      if (Date.now() - lastSync < 10000) {
+      // Concurrency Lock: Minimum 8s between network pulses (resilient to Sportbex trial limits)
+      if (Date.now() - lastSync < 8000) {
         return { success: true, reason: 'recent' };
       }
     }
 
-    // 1. Fetch Fresh Data from Sportbex
+    // 1. Fetch Fresh Data using the Betfair Competitions -> Events flow
     const liveMatches = await fetchLiveMatches();
     const competitions = await fetchCompetitions();
 
-    // Fetch next 2 days to populate upcoming terminal
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const dayAfter = new Date();
-    dayAfter.setDate(dayAfter.getDate() + 2);
-    
-    const [sched1, sched2] = await Promise.all([
-      fetchDailySchedule(tomorrow.toISOString().split('T')[0]),
-      fetchDailySchedule(dayAfter.toISOString().split('T')[0])
-    ]);
-
-    const combinedMatches = [...(liveMatches || []), ...(sched1 || []), ...(sched2 || [])];
-    
-    if (combinedMatches.length === 0) {
+    if (liveMatches.length === 0 && competitions.length === 0) {
       return { success: false, reason: 'no-data' };
     }
 
-    // 2. Sync Tournaments
+    // 2. Sync Tournaments (Competitions)
     const tournamentBatch = writeBatch(db);
-    const tournamentMap = new Map();
-
-    (competitions || []).forEach(c => {
-      tournamentMap.set(c.id, {
-        id: c.id,
-        name: c.name,
-        category: c.category || 'International',
-        gender: c.gender || 'men',
-        type: c.type || 'league'
-      });
-    });
-
-    // Also extract from matches
-    combinedMatches.forEach(m => {
-      if (m.seriesId && m.series && !tournamentMap.has(m.seriesId)) {
-        tournamentMap.set(m.seriesId, {
-          id: m.seriesId,
-          name: m.series,
-          category: 'Live Feed',
-          gender: 'men',
-          type: 'league'
-        });
-      }
-    });
-
-    const filteredTournaments = Array.from(tournamentMap.values());
-    filteredTournaments.forEach(t => {
+    competitions.forEach(t => {
       const tRef = doc(db, 'tournaments', t.id);
       tournamentBatch.set(tRef, { ...t, lastUpdated: new Date().toISOString() }, { merge: true });
     });
     await tournamentBatch.commit();
 
-    // 3. Sync Matches
-    const matchMap = new Map();
-    combinedMatches.forEach(m => { if (m?.id) matchMap.set(m.id, m); });
-    
-    const validMatches = Array.from(matchMap.values());
+    // 3. Sync Matches (Events)
     const batch = writeBatch(db);
     let updatedCount = 0;
 
-    for (const match of validMatches) {
+    for (const match of liveMatches) {
       const matchRef = doc(db, 'matches', match.id);
       
-      // Calculate Exchange Odds (Back/Lay) from probabilities
-      const probHome = match.probabilities?.home || 50;
-      const probAway = match.probabilities?.away || 50;
-      const jitter = (Math.random() * 0.04) - 0.02;
-
-      const baseHomeBack = Math.max(1.01, (100 / probHome) * 0.98);
-      const baseAwayBack = Math.max(1.01, (100 / probAway) * 0.98);
+      // Calculate Professional Back/Lay Jitter for Trial data
+      const baseOdds = 1.90;
+      const jitter = (Math.random() * 0.1) - 0.05;
 
       const matchData: any = {
-        teamA: match.teams[0] || 'TBA',
-        teamB: match.teams[1] || 'TBA',
+        teamA: match.teams[0],
+        teamB: match.teams[1],
         startTime: match.date,
         status: match.status,
-        statusText: match.rawStatusText || 'Live',
+        statusText: match.rawStatusText,
         venue: match.venue,
-        series: match.series || 'International Series',
-        seriesId: match.seriesId || '',
+        series: match.series,
+        seriesId: match.seriesId,
         lastUpdated: new Date().toISOString(),
         odds: {
-          home: { back: baseHomeBack + jitter, lay: (baseHomeBack + jitter) + 0.02 },
-          away: { back: baseAwayBack - jitter, lay: (baseAwayBack - jitter) + 0.02 }
+          home: { back: baseOdds + jitter, lay: (baseOdds + jitter) + 0.02 },
+          away: { back: (4.0 - baseOdds) - jitter, lay: ((4.0 - baseOdds) - jitter) + 0.02 }
         }
       };
-
-      let scoreStr = 'TBD';
-      if (match.score && Array.isArray(match.score)) {
-        scoreStr = match.score.map(s => `${s.inning}: ${s.r}`).join(' | ');
-      }
-      if (scoreStr !== 'TBD' || match.status === 'upcoming') {
-        matchData.currentScore = scoreStr;
-      }
 
       batch.set(matchRef, matchData, { merge: true });
       updatedCount++;
 
-      // Update Market Sub-collection
+      // Initialize Winner Market
       const marketRef = doc(collection(db, 'matches', match.id, 'markets'), 'match_winner');
       batch.set(marketRef, {
         id: 'match_winner',
         type: 'match_winner',
-        status: match.status === 'finished' ? 'closed' : 'open',
+        status: 'open',
         selections: [
           { id: 'home', name: matchData.teamA, odds: matchData.odds.home.back },
           { id: 'away', name: matchData.teamB, odds: matchData.odds.away.back }
@@ -138,15 +83,17 @@ export async function syncCricketMatchesAction(db: Firestore) {
     }
 
     await batch.commit();
+
+    // 4. Update Global Telemetry
     await setDoc(settingsRef, { 
       lastGlobalSync: new Date().toISOString(),
       activeMatchesCount: updatedCount,
       syncStatus: 'success'
     }, { merge: true });
 
-    return { success: true, count: updatedCount, tournamentsCount: filteredTournaments.length };
+    return { success: true, count: updatedCount, tournamentsCount: competitions.length };
   } catch (error: any) {
-    console.error("Sportbex Sync Failure:", error);
+    console.error("Sportbex Network Failure:", error);
     return { success: false, error: error.message };
   }
 }
@@ -160,9 +107,10 @@ export async function clearAllMatchesAction(db: Firestore) {
     for (const col of collections) {
       const snap = await getDocs(collection(db, col));
       for (const docSnap of snap.docs) {
-        const subSnap = await getDocs(collection(db, col, docSnap.id, 'markets'));
+        // Clear subcollections first
+        const marketsSnap = await getDocs(collection(db, col, docSnap.id, 'markets'));
         const b = writeBatch(db);
-        subSnap.docs.forEach(d => b.delete(d.ref));
+        marketsSnap.docs.forEach(d => b.delete(d.ref));
         b.delete(docSnap.ref);
         await b.commit();
       }
