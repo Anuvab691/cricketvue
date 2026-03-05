@@ -4,7 +4,7 @@ import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebas
 import { fetchLiveMatches, fetchMatchDetail } from '@/services/cricket-api-service';
 
 /**
- * Sync Engine: Re-activated to fetch high-fidelity data from Sportbex.
+ * Sync Engine: Updated to use the nested Sportbex data structures.
  * Performs a clear and repopulate cycle to ensure the Match Terminal is fresh.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
@@ -25,7 +25,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const detail = await fetchMatchDetail(match.id);
       const matchData = detail || match;
 
-      const matchRef = doc(db, 'matches', match.id);
+      const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         teamA: matchData.teams[0] || 'TBA',
         teamB: matchData.teams[1] || 'TBA',
@@ -43,7 +43,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }, { merge: true });
 
       // Ensure Market subcollection exists
-      const marketRef = doc(db, 'matches', match.id, 'markets', 'match_winner');
+      const marketRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
       await setDoc(marketRef, {
         id: 'match_winner',
         type: 'match_winner',
