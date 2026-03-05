@@ -99,7 +99,7 @@ export async function fetchBetfairMarkets(eventId: string, sportId: string = '4'
 }
 
 /**
- * Betfair Pulse: Fetches the Market Book (odds/prices) via POST as requested.
+ * Betfair Pulse: Fetches the Market Book (odds/prices) via POST.
  */
 export async function fetchMarketBook(marketId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
@@ -160,7 +160,7 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
- * Updated to handle the specific teams.t1 and teams.t2 structure provided.
+ * Implements robust ID sanitization to prevent URL decoding errors.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -181,9 +181,9 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = status === 'COMPLETED' || status === 'finished';
   const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play';
 
-  // Sanitize IDs: Decode then replace spaces for clean Firestore keys
+  // Sanitize IDs: Slugify to replace spaces with hyphens for clean Firestore keys
   let finalId = originalId || match.id?.toString() || Math.random().toString(36).substr(2, 9);
-  finalId = decodeURIComponent(finalId).replace(/\s+/g, '-');
+  finalId = decodeURIComponent(finalId).trim().replace(/\s+/g, '-').toUpperCase();
 
   return {
     id: finalId,

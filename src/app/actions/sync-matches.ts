@@ -13,14 +13,16 @@ import {
 
 /**
  * Integrated Sync Engine: Synchronizes Matches and Tournaments with a resilient Betfair Discovery Chain.
+ * Includes "Fresh Slate" support to auto-purge stale records.
  */
 export async function syncCricketMatchesAction(db: Firestore, options: { clearFirst?: boolean } = {}) {
   try {
+    // 1. Fresh Slate Protocol: Clear existing matches to avoid "old scores" or stale data.
     if (options.clearFirst) {
       await clearAllMatchesAction(db);
     }
 
-    // 1. Sync Series (Tournaments)
+    // 2. Sync Series (Tournaments)
     const seriesList = await fetchLiveSeries();
     for (const series of seriesList) {
       if (!series.id) continue;
@@ -30,19 +32,19 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       }, { merge: true });
     }
 
-    // 2. Initial Data Gathering: Live Matches and Betfair Competitions
+    // 3. Gathering Live Matches and Betfair Discovery Chain
     const liveMatchesList = await fetchLiveMatches();
     const competitions = await fetchBetfairCompetitions('4'); // Sport ID 4 for Cricket
 
     let syncedCount = 0;
     for (const matchSummary of liveMatchesList) {
-      // Respect trial API rate limits with a small staggered delay
+      // Respect API rate limits
       await new Promise(resolve => setTimeout(resolve, 800));
       
       // Fetch high-fidelity detail for the match (t1/t2 structure)
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
 
-      // Default Odds Schema
+      // Default Odds Schema (Liquidity Placeholder)
       let marketOdds = {
         home: { back: 1.00, lay: 0.00 },
         away: { back: 1.00, lay: 0.00 }
@@ -50,13 +52,13 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
 
       let discoveredMarketId = null;
 
-      // 3. Betfair Exchange Pulse: Discovery Protocol
+      // 4. Betfair Exchange Discovery Protocol
       try {
         const homeTeam = matchData.teams[0].toLowerCase();
         const awayTeam = matchData.teams[1].toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step A: Discovery Phase - Matching competition
+        // Step A: Match competition by series or team name
         const matchingComp = competitions.find((c: any) => {
           const cName = (c.competition?.name || '').toLowerCase();
           return seriesName.includes(cName) || cName.includes(seriesName) || 
@@ -64,7 +66,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         });
 
         if (matchingComp) {
-          // Step B: Event Phase
+          // Step B: Discover Event
           const events = await fetchBetfairEvents(matchingComp.competition.id, '4');
           const matchingEvent = events.find((e: any) => {
             const eName = (e.event?.name || '').toLowerCase();
@@ -72,15 +74,15 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           });
 
           if (matchingEvent) {
-            // Step C: Market Phase
+            // Step C: Discover Winner Market
             const markets = await fetchBetfairMarkets(matchingEvent.event.id, '4');
             const winnerMarket = markets.find((m: any) => 
-              m.marketName === 'Match Odds' || m.marketName === 'Winner' || m.marketName === 'Match Betting'
+              ['Match Odds', 'Winner', 'Match Betting'].some(term => m.marketName.includes(term))
             );
             
             if (winnerMarket) {
               discoveredMarketId = winnerMarket.marketId;
-              // Step D: Book Phase (POST request)
+              // Step D: Pulse Market Book (POST request)
               const book = await fetchMarketBook(discoveredMarketId, '4');
               
               if (book && book.runners && book.runners.length >= 2) {
@@ -99,10 +101,10 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           }
         }
       } catch (betfairErr) {
-        console.warn(`Betfair Discovery interrupted for ${matchData.name}:`, betfairErr);
+        console.warn(`Betfair Pulse interrupted for ${matchData.id}`);
       }
 
-      // 4. Persistence Phase: Save to Match Terminal
+      // 5. Persistence Phase: Save to Terminal
       const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         ...matchData,
@@ -112,7 +114,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         marketId: discoveredMarketId
       }, { merge: true });
 
-      // Update Sub-Collection for betting
+      // Market Sub-collection Update
       const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
       await setDoc(marketSubRef, {
         id: 'match_winner',
@@ -139,7 +141,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
 
     return { success: true, count: syncedCount, tournamentsCount: seriesList.length };
   } catch (error: any) {
-    console.error("Sync Engine Failure:", error);
+    console.error("Terminal Sync Error:", error);
     return { success: false, error: error.message };
   }
 }

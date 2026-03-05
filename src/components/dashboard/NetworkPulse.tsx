@@ -9,8 +9,9 @@ import { Zap, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
- * NetworkPulse: A background service component that automatically purges and syncs data 
- * every 10 seconds for authorized users, ensuring real-time scores and odds.
+ * NetworkPulse: Automated background service.
+ * Performs a "Fresh Pulse" (auto-purge and sync) every 10 seconds 
+ * to ensure scores and Betfair odds are perfectly synchronized.
  */
 export function NetworkPulse() {
   const firestore = useFirestore();
@@ -29,8 +30,8 @@ export function NetworkPulse() {
 
     const performPulse = async () => {
       setIsSyncing(true);
-      // Automatically syncs (merges) match scores and professional odds
-      await syncCricketMatchesAction(firestore);
+      // Auto-purge "old scores" and sync fresh professional feed
+      await syncCricketMatchesAction(firestore, { clearFirst: true });
       setLastPulse(new Date().toLocaleTimeString());
       setIsSyncing(false);
     };
@@ -38,7 +39,7 @@ export function NetworkPulse() {
     // Initial Pulse
     performPulse();
 
-    // 10-second interval pulse
+    // 10-second high-frequency refresh
     const interval = setInterval(performPulse, 10000);
 
     return () => clearInterval(interval);
@@ -64,10 +65,10 @@ export function NetworkPulse() {
       </div>
       <div className="flex flex-col">
         <span className="text-[9px] font-black uppercase text-white tracking-widest leading-none">
-          {isSyncing ? 'Network Syncing...' : 'Network Active'}
+          {isSyncing ? 'Auto-Purge & Sync...' : 'Network Active'}
         </span>
         <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">
-          Last Pulse: {lastPulse}
+          Pulse: {lastPulse}
         </span>
       </div>
     </div>
