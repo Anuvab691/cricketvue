@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -23,10 +22,15 @@ export function SyncDataButton() {
           title: "Network Synchronized",
           description: `Fetched ${result.count || 0} real-world matches.`,
         });
+      } else if (result.reason === 'recent') {
+        toast({
+          title: "Network Ready",
+          description: "Data is already up to date.",
+        });
       } else {
         toast({
-          title: "Sync Error",
-          description: result.error || "Failed to fetch data.",
+          title: "Sync Warning",
+          description: result.error || "No new data found on the network.",
           variant: "destructive"
         });
       }
@@ -43,15 +47,21 @@ export function SyncDataButton() {
 
   const handleClear = async () => {
     if (!firestore) return;
-    if (!confirm("Are you sure you want to PERMANENTLY delete all match data?")) return;
+    if (!confirm("Are you sure you want to PERMANENTLY purge all match data? This will clear the dashboard.")) return;
     
     setClearing(true);
     try {
       const result = await clearAllMatchesAction(firestore);
       if (result.success) {
         toast({
-          title: "Database Cleared",
-          description: `Successfully removed ${result.count || 0} matches.`,
+          title: "Database Purged",
+          description: `Successfully removed match data from the terminal.`,
+        });
+      } else {
+        toast({
+          title: "Purge Error",
+          description: result.error || "Failed to clear database.",
+          variant: "destructive"
         });
       }
     } catch (e: any) {
@@ -71,7 +81,7 @@ export function SyncDataButton() {
         variant="ghost" 
         size="sm" 
         onClick={handleSync}
-        disabled={syncing}
+        disabled={syncing || clearing}
         className="h-7 text-[10px] font-black uppercase tracking-tighter bg-primary/20 hover:bg-primary/40 text-primary gap-1.5 border border-primary/30"
       >
         {syncing ? (
@@ -86,7 +96,7 @@ export function SyncDataButton() {
         variant="ghost" 
         size="sm" 
         onClick={handleClear} 
-        disabled={clearing}
+        disabled={clearing || syncing}
         className="h-7 text-[10px] font-black uppercase tracking-tighter bg-red-500/20 hover:bg-red-500/40 text-red-200 gap-1.5 border border-red-500/30"
       >
         {clearing ? (
@@ -94,7 +104,7 @@ export function SyncDataButton() {
         ) : (
           <Trash2 className="w-3 h-3" />
         )}
-        <span>Clear All</span>
+        <span>Purge All</span>
       </Button>
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc, deleteDoc } from 'firebase/firestore';
 import { fetchLiveMatches, fetchCompetitions, fetchMatchDetail } from '@/services/cricket-api-service';
 
 /**
@@ -27,6 +27,11 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const competitions = await fetchCompetitions();
 
     if (liveMatchesOverview.length === 0 && competitions.length === 0) {
+      // If we found nothing, we update the count to 0 but keep last sync time
+      await setDoc(settingsRef, { 
+        activeMatchesCount: 0,
+        syncStatus: 'success'
+      }, { merge: true });
       return { success: false, reason: 'no-data' };
     }
 
@@ -39,12 +44,11 @@ export async function syncCricketMatchesAction(db: Firestore) {
     await tournamentBatch.commit();
 
     // 3. Deep Sync: Fetch details for each live match sequentially
-    const batch = writeBatch(db);
     let updatedCount = 0;
 
     for (const overview of liveMatchesOverview) {
-      // Respect Trial API Rate Limit (1s delay between detail calls)
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      // Respect Trial API Rate Limit (1.2s delay between detail calls)
+      await new Promise(resolve => setTimeout(resolve, 1300));
       
       const match = await fetchMatchDetail(overview.id);
       if (!match) continue;
@@ -68,12 +72,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
         }
       };
 
-      batch.set(matchRef, matchData, { merge: true });
+      await setDoc(matchRef, matchData, { merge: true });
       updatedCount++;
 
       // Initialize Winner Market
       const marketRef = doc(collection(db, 'matches', match.id, 'markets'), 'match_winner');
-      batch.set(marketRef, {
+      await setDoc(marketRef, {
         id: 'match_winner',
         type: 'match_winner',
         status: 'open',
@@ -83,8 +87,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
         ]
       }, { merge: true });
     }
-
-    await batch.commit();
 
     // 4. Update Global Telemetry
     await setDoc(settingsRef, { 
@@ -100,26 +102,43 @@ export async function syncCricketMatchesAction(db: Firestore) {
   }
 }
 
+/**
+ * Deep Purge: Removes all matches, tournaments, and their associated markets.
+ */
 export async function clearAllMatchesAction(db: Firestore) {
   try {
     const settingsRef = doc(db, 'app_settings', 'global');
     await setDoc(settingsRef, { syncStatus: 'clearing' }, { merge: true });
 
-    const collections = ['matches', 'tournaments'];
-    for (const col of collections) {
-      const snap = await getDocs(collection(db, col));
-      for (const docSnap of snap.docs) {
-        const marketsSnap = await getDocs(collection(db, col, docSnap.id, 'markets'));
-        const b = writeBatch(db);
-        marketsSnap.docs.forEach(d => b.delete(d.ref));
-        b.delete(docSnap.ref);
-        await b.commit();
-      }
-    }
+    // 1. Clear Matches and Subcollections
+    const matchesSnap = await getDocs(collection(db, 'matches'));
+    let matchCount = 0;
     
-    await setDoc(settingsRef, { syncStatus: 'idle', activeMatchesCount: 0, lastGlobalSync: null }, { merge: true });
-    return { success: true };
+    for (const matchDoc of matchesSnap.docs) {
+      const marketsSnap = await getDocs(collection(db, 'matches', matchDoc.id, 'markets'));
+      const batch = writeBatch(db);
+      marketsSnap.docs.forEach(m => batch.delete(m.ref));
+      batch.delete(matchDoc.ref);
+      await batch.commit();
+      matchCount++;
+    }
+
+    // 2. Clear Tournaments
+    const tournamentsSnap = await getDocs(collection(db, 'tournaments'));
+    const tBatch = writeBatch(db);
+    tournamentsSnap.docs.forEach(t => tBatch.delete(t.ref));
+    await tBatch.commit();
+    
+    // 3. Reset Settings
+    await setDoc(settingsRef, { 
+      syncStatus: 'idle', 
+      activeMatchesCount: 0, 
+      lastGlobalSync: null 
+    }, { merge: true });
+
+    return { success: true, count: matchCount };
   } catch (error: any) {
-    return { error: error.message };
+    console.error("Database Purge Failed:", error);
+    return { success: false, error: error.message };
   }
 }
