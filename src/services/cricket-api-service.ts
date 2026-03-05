@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview High-Performance Server-Side Service for Sportbex API.
- * Optimized for the high-fidelity JSON schema provided for live matches.
+ * Optimized for the high-fidelity JSON schema provided for live matches and series.
  */
 
 export interface ExternalMatch {
@@ -21,13 +21,22 @@ export interface ExternalMatch {
   rawStatusText?: string;
 }
 
+export interface ExternalSeries {
+  id: string;
+  name: string;
+  category: string;
+  gender: string;
+  type: string;
+  status: string;
+}
+
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
 
 /**
  * Core fetcher utilizing header-based authentication for Sportbex.
  */
 async function fetchFromSportbex(endpoint: string) {
-  const apiKey = process.env.SPORTBEX_API_KEY;
+  const apiKey = process.env.SPORTBEX_API_KEY || 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
   if (!apiKey) {
     console.warn("Sportbex API Key Missing: Ensure SPORTBEX_API_KEY is in .env");
     return null;
@@ -90,11 +99,33 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
 }
 
 /**
+ * Fetches live series (tournaments) from the network.
+ */
+export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
+  try {
+    // URL: live-score/series?page=1&perPage=10&year=2026
+    const json = await fetchFromSportbex(`live-score/series?page=1&perPage=10&year=2026`);
+    if (!json || !json.data || !json.data.series) return [];
+
+    return json.data.series.map((s: any) => ({
+      id: s.id?.toString(),
+      name: s.name || 'Unknown Series',
+      category: s.category || 'International',
+      gender: s.gender || 'Men',
+      type: s.type || 'Series',
+      status: s.status || 'Active'
+    }));
+  } catch (e) {
+    console.error("Sportbex Live Series Fetch Failed:", e);
+    return [];
+  }
+}
+
+/**
  * Transforms Sportbex Live Match schema into Terminal Match schema.
  * Updated to handle the nested teams object (t1/t2) and result messages.
  */
 function transformSportbexLiveMatch(match: any): ExternalMatch {
-  // Support for nested teams structure (t1, t2)
   const teamsData = match.teams || {};
   const t1 = teamsData.t1 || {};
   const t2 = teamsData.t2 || {};
@@ -102,7 +133,6 @@ function transformSportbexLiveMatch(match: any): ExternalMatch {
   const homeName = t1.name || match.home_team_name || 'TBA';
   const awayName = t2.name || match.away_team_name || 'TBA';
   
-  // Combine scores for display
   let scoreText = match.score || '';
   if (t1.score && t2.score) {
     scoreText = `${homeName}: ${t1.score} | ${awayName}: ${t2.score}`;
@@ -110,7 +140,6 @@ function transformSportbexLiveMatch(match: any): ExternalMatch {
     scoreText = `${t1.score || '0/0'} vs ${t2.score || '0/0'}`;
   }
 
-  // Determine status
   const isCompleted = match.status === 'COMPLETED' || match.status === 'finished';
   const isLive = match.isLive === true || match.status === 'LIVE';
 

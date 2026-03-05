@@ -1,27 +1,41 @@
 'use client';
 
 import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
-import { fetchLiveMatches, fetchMatchDetail } from '@/services/cricket-api-service';
+import { fetchLiveMatches, fetchMatchDetail, fetchLiveSeries } from '@/services/cricket-api-service';
 
 /**
- * Sync Engine: Updated to use the nested Sportbex data structures.
- * Performs a clear and repopulate cycle to ensure the Match Terminal is fresh.
+ * Sync Engine: Updated to sync both Matches and Tournaments (Series).
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    // 1. Fetch Pulse
+    // 1. Sync Series (Tournaments)
+    const seriesList = await fetchLiveSeries();
+    let seriesSynced = 0;
+    for (const series of seriesList) {
+      const seriesRef = doc(db, 'tournaments', series.id);
+      await setDoc(seriesRef, {
+        name: series.name,
+        category: series.category,
+        gender: series.gender,
+        type: series.type,
+        status: series.status,
+        lastUpdated: new Date().toISOString()
+      }, { merge: true });
+      seriesSynced++;
+    }
+
+    // 2. Sync Live Matches
     const liveMatches = await fetchLiveMatches();
     if (!liveMatches || liveMatches.length === 0) {
       console.log("Sync Engine: No live matches found on network.");
-      return { success: true, count: 0 };
+      return { success: true, count: 0, tournamentsCount: seriesSynced };
     }
 
     let syncedCount = 0;
     for (const match of liveMatches) {
-      // 2. Delay for Rate Limiting (1.2s between calls for Trial keys)
+      // Delay for Rate Limiting (1.2s between calls for Trial keys)
       await new Promise(resolve => setTimeout(resolve, 1200));
       
-      // 3. Deep Sync Detail
       const detail = await fetchMatchDetail(match.id);
       const matchData = detail || match;
 
@@ -57,7 +71,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       syncedCount++;
     }
 
-    return { success: true, count: syncedCount };
+    return { success: true, count: syncedCount, tournamentsCount: seriesSynced };
   } catch (error: any) {
     console.error("Sync Engine Failure:", error);
     return { success: false, error: error.message };
@@ -65,13 +79,17 @@ export async function syncCricketMatchesAction(db: Firestore) {
 }
 
 /**
- * Deep Purge: Clears all matches from the local database.
+ * Deep Purge: Clears all matches and tournaments from the local database.
  */
 export async function clearAllMatchesAction(db: Firestore) {
   try {
     const matchesSnap = await getDocs(collection(db, 'matches'));
+    const tournamentsSnap = await getDocs(collection(db, 'tournaments'));
+    
     const batch = writeBatch(db);
     matchesSnap.docs.forEach(matchDoc => batch.delete(matchDoc.ref));
+    tournamentsSnap.docs.forEach(tDoc => batch.delete(tDoc.ref));
+    
     await batch.commit();
     return { success: true };
   } catch (error: any) {
