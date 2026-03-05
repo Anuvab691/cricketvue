@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -8,12 +7,15 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { BettingPanel } from '@/components/betting/BettingPanel';
 import { AiInsightBox } from '@/components/betting/AiInsightBox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, UserCircle, Zap, ShieldCheck, ChevronLeft } from 'lucide-react';
+import { Loader2, UserCircle, Zap, ShieldCheck, ChevronLeft, Database } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { format, parseISO } from 'date-fns';
 import { logout } from '@/firebase/auth/auth-service';
 import { useState } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
+import { toast } from '@/hooks/use-toast';
 
 export default function MatchPage() {
   const { id } = useParams();
@@ -49,21 +51,48 @@ export default function MatchPage() {
     router.push('/login');
   };
 
-  if (matchLoading || marketsLoading) {
+  const handleManualSync = async () => {
+    if (!firestore) return;
+    setIsSyncing(true);
+    const res = await syncCricketMatchesAction(firestore);
+    setIsSyncing(false);
+    if (res.success) {
+      toast({ title: "Network Refreshed", description: "Market data synchronized." });
+    }
+  };
+
+  if (matchLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#f8f9fa]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Accessing Network Feed...</p>
+        </div>
       </div>
     );
   }
 
   if (!match) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-[#f8f9fa] gap-4">
-        <p className="text-slate-500 font-bold uppercase tracking-widest">Match Record Not Found</p>
-        <Link href="/dashboard">
-          <button className="bg-primary text-white px-6 py-2 rounded-sm font-bold text-xs uppercase">Return to Dashboard</button>
-        </Link>
+      <div className="flex min-h-screen bg-[#f8f9fa] text-slate-900">
+        <Sidebar userId={effectiveUserId} />
+        <main className="flex-1 lg:pl-[240px] flex flex-col items-center justify-center p-8 text-center space-y-6">
+          <Database size={48} className="text-slate-200" />
+          <div className="space-y-2">
+            <h2 className="text-xl font-black uppercase tracking-tighter">Match Data Unavailable</h2>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest max-w-sm mx-auto">
+              The record for ID "{id}" was not found in the local terminal. Use the sync control to refresh the global feed.
+            </p>
+          </div>
+          <div className="flex gap-3">
+             <Link href="/dashboard">
+                <Button variant="outline" className="text-[10px] font-black uppercase italic tracking-tighter">Return to Dashboard</Button>
+             </Link>
+             <Button onClick={handleManualSync} disabled={isSyncing} className="bg-primary text-white text-[10px] font-black uppercase italic tracking-tighter">
+               {isSyncing ? 'Syncing...' : 'Sync Network Now'}
+             </Button>
+          </div>
+        </main>
       </div>
     );
   }
@@ -123,7 +152,7 @@ export default function MatchPage() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Manual Sync Only
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Professional Sync
             </div>
             <p className="text-[11px] font-bold text-slate-600 truncate">
               {match.series} | {match.venue} | {format(matchDate, 'dd/MM/yyyy HH:mm')}
@@ -178,11 +207,11 @@ export default function MatchPage() {
                 <div className="space-y-4 text-xs font-bold text-slate-600 uppercase">
                    <div className="flex justify-between border-b border-slate-100 pb-2">
                       <span className="text-slate-400">Stadium</span>
-                      <span>{match.venue}</span>
+                      <span className="truncate max-w-[150px]">{match.venue}</span>
                    </div>
                    <div className="flex justify-between border-b border-slate-100 pb-2">
                       <span className="text-slate-400">Series</span>
-                      <span>{match.series}</span>
+                      <span className="truncate max-w-[150px]">{match.series}</span>
                    </div>
                    <div className="flex justify-between border-b border-slate-100 pb-2">
                       <span className="text-slate-400">Date</span>

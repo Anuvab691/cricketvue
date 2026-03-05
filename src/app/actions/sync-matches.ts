@@ -12,6 +12,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const seriesList = await fetchLiveSeries();
     let seriesSynced = 0;
     for (const series of seriesList) {
+      if (!series.id) continue;
       const seriesRef = doc(db, 'tournaments', series.id);
       await setDoc(seriesRef, {
         name: series.name,
@@ -37,16 +38,22 @@ export async function syncCricketMatchesAction(db: Firestore) {
       await new Promise(resolve => setTimeout(resolve, 1200));
       
       // We fetch detailed data using the ID from the list to ensure consistency
+      // CRITICAL: Ensure match.id exists before calling fetchMatchDetail
+      if (!match.id) continue;
+      
       const detail = await fetchMatchDetail(match.id);
       const matchData = detail || match;
 
-      // CRITICAL: Ensure we use the ID from the list to avoid "Record Not Found" errors
       const matchId = match.id;
       const matchRef = doc(db, 'matches', matchId);
 
+      // Map Teams (Ensuring Team A and Team B are captured from nested teams object)
+      const teamA = matchData.teams[0] || 'TBA';
+      const teamB = matchData.teams[1] || 'TBA';
+
       await setDoc(matchRef, {
-        teamA: matchData.teams[0] || 'TBA',
-        teamB: matchData.teams[1] || 'TBA',
+        teamA: teamA,
+        teamB: teamB,
         startTime: matchData.date,
         status: matchData.status,
         statusText: matchData.rawStatusText || 'Live',
@@ -67,8 +74,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
         type: 'match_winner',
         status: 'open',
         selections: [
-          { id: 'home', name: matchData.teams[0], odds: 1.85 },
-          { id: 'away', name: matchData.teams[1], odds: 2.10 }
+          { id: 'home', name: teamA, odds: 1.85 },
+          { id: 'away', name: teamB, odds: 2.10 }
         ]
       }, { merge: true });
 

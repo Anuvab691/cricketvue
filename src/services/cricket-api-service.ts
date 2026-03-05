@@ -86,15 +86,16 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 
 /**
  * Fetches deep-dive match data for a specific match ID.
- * Accepts the originalId to ensure the returned object maintains ID consistency.
  */
 export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch | null> {
   try {
     const json = await fetchFromSportbex(`live-score/match/${matchId}`);
     if (!json || !json.data) return null;
 
+    // Use the ID provided in the call to ensure the returned object maintains consistency
     return transformSportbexLiveMatch(json.data, matchId);
   } catch (e) {
+    console.error(`Sportbex Detail Fetch Failed for ${matchId}:`, e);
     return null;
   }
 }
