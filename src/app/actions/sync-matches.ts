@@ -14,7 +14,7 @@ import {
 
 /**
  * Precision Sync Engine: Implements the full Betfair Discovery Chain.
- * 1. competitions -> 2. events -> 3. marketIds -> 4. listMarketBook (POST)
+ * Uses Step-by-Step Discovery: competitions -> events -> marketIds -> listMarketBook (POST)
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -38,9 +38,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     // We crawl competitions to find events and link them to live matches
     for (const comp of (competitions || [])) {
-      if (!comp.competition?.id) continue;
+      const competitionId = comp.competition?.id;
+      if (!competitionId) continue;
       
-      const events = await fetchBetfairEvents(comp.competition.id, '4');
+      const events = await fetchBetfairEvents(competitionId, '4');
       if (!events || !Array.isArray(events)) continue;
 
       for (const betfairEvent of events) {
@@ -76,10 +77,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
     }
 
     // 4. Phase 3 & 4: Professional Odds Pulse (listMarketBook POST)
-    const allMarketIds = Array.from(matchToBetfairMap.values()).map(b => b.marketId);
+    // We send a comma-separated string of marketIds as per specific protocol.
+    const marketIdsArray = Array.from(matchToBetfairMap.values()).map(b => b.marketId);
+    const marketIdsString = marketIdsArray.join(', ');
     let marketBooks: any[] = [];
-    if (allMarketIds.length > 0) {
-      marketBooks = await fetchMarketOdds(allMarketIds, '4') || [];
+    if (marketIdsString) {
+      marketBooks = await fetchMarketOdds(marketIdsString, '4') || [];
     }
 
     // 5. Update Matches and Fetch Micro-Markets
@@ -186,6 +189,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }, { merge: true });
     }
 
+    // 6. "No More, No Less" Pruning
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;

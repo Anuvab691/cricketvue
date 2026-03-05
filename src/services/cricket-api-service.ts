@@ -86,10 +86,11 @@ export async function fetchBetfairEvents(competitionId: string, sportId: string 
 
 /**
  * Discovery Phase 3: Market Odds via listMarketBook (POST)
+ * Accepts a comma-separated string of marketIds as per specific protocol.
  */
-export async function fetchMarketOdds(marketIds: string[], sportId: string = '4') {
-  if (!marketIds || marketIds.length === 0) return null;
-  const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { marketIds });
+export async function fetchMarketOdds(marketIdsString: string, sportId: string = '4') {
+  if (!marketIdsString) return null;
+  const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { marketIds: marketIdsString });
   return json?.data || null;
 }
 
@@ -104,7 +105,7 @@ export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
 
 /**
  * Professional Premium Fancy odds fetcher.
- * Uses eventId to fetch high-frequency micro-market data.
+ * Uses eventId to fetch high-frequency micro-market data via GET /betfair/getPremium/4/{eventId}
  */
 export async function fetchPremiumFancy(eventId: string) {
   const apiKey = process.env.SPORTBEX_API_KEY || API_KEY;
