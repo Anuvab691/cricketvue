@@ -1,12 +1,10 @@
 'use client';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { placeBetAction } from '@/app/actions/betting';
 import { toast } from '@/hooks/use-toast';
-import { Trophy, Zap, Info, Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
 import { cn } from '@/lib/utils';
 
@@ -55,7 +53,6 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
   const fancyMarket = match.markets?.find((m: any) => m.type === 'fancy');
   const premiumFancyMarket = match.markets?.find((m: any) => m.type === 'premium_fancy');
 
-  // Runners for Premium Fancy - prioritizing fresh override from the page
   const premiumRunners = premiumFancyOverride && premiumFancyOverride.length > 0 
     ? premiumFancyOverride 
     : (premiumFancyMarket?.selections || []);
@@ -211,11 +208,11 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
               <div key={idx} className="bg-white p-3 flex justify-between items-center h-auto min-h-[48px]">
                 <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight max-w-[140px] leading-tight">{runner.runnerName || runner.name}</span>
                 <div className="flex gap-1">
-                   <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center hover:bg-pink-200">
+                   <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center hover:bg-pink-200" onClick={() => handlePlaceBet(premiumFancyMarket || {id: 'premium'}, runner, runner.layPrice || runner.no, true)}>
                      <span className="text-xs font-black">{runner.layPrice || runner.no || 0}</span>
                      <span className="text-[8px] font-bold">Lay</span>
                    </button>
-                   <button className="w-12 h-9 bg-blue-100 border border-blue-200 text-blue-700 rounded-sm flex flex-col items-center justify-center hover:bg-blue-200">
+                   <button className="w-12 h-9 bg-blue-100 border border-blue-200 text-blue-700 rounded-sm flex flex-col items-center justify-center hover:bg-blue-200" onClick={() => handlePlaceBet(premiumFancyMarket || {id: 'premium'}, runner, runner.backPrice || runner.yes, false)}>
                      <span className="text-xs font-black">{runner.backPrice || runner.yes || 0}</span>
                      <span className="text-[8px] font-bold">Back</span>
                    </button>

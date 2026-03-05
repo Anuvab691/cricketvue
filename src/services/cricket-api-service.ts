@@ -86,10 +86,11 @@ export async function fetchBetfairEvents(competitionId: string, sportId: string 
 
 /**
  * Discovery Phase 3: Market Odds via listMarketBook (POST)
- * Accepts a comma-separated string of marketIds as per specific protocol.
+ * Accepts a comma-separated string of marketIds as per professional protocol.
  */
 export async function fetchMarketOdds(marketIdsString: string, sportId: string = '4') {
   if (!marketIdsString) return null;
+  // Professional Protocol: Body must be {"marketIds": "id1, id2, id3"}
   const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { marketIds: marketIdsString });
   return json?.data || null;
 }
@@ -105,16 +106,9 @@ export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
 
 /**
  * Professional Premium Fancy odds fetcher.
- * Uses eventId to fetch high-frequency micro-market data via GET /betfair/getPremium/4/{eventId}
  */
 export async function fetchPremiumFancy(eventId: string) {
   const apiKey = process.env.SPORTBEX_API_KEY || API_KEY;
-
-  if (!apiKey) {
-    console.warn("SPORTBEX_API_KEY missing");
-    return [];
-  }
-
   const url = `https://trial-api.sportbex.com/api/betfair/getPremium/4/${eventId}`;
 
   try {
@@ -127,16 +121,10 @@ export async function fetchPremiumFancy(eventId: string) {
       }
     });
 
-    if (!res.ok) {
-      console.error("Premium Fancy fetch failed", res.status);
-      return [];
-    }
-
+    if (!res.ok) return [];
     const json = await res.json();
     return json?.data || [];
-
   } catch (err) {
-    console.error("Premium Fancy error", err);
     return [];
   }
 }
