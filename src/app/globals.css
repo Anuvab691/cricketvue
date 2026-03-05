@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
+    --background: 210 20% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -25,7 +25,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
-    --radius: 0.3rem;
+    --radius: 0.2rem;
   }
 
   .dark {
@@ -76,16 +76,36 @@
   @apply border-b border-slate-200 hover:bg-slate-50 transition-colors flex items-center px-4 py-2 bg-white text-sm;
 }
 
-.odds-box {
-  @apply w-12 h-8 flex flex-col items-center justify-center text-[10px] font-bold rounded-sm border cursor-pointer transition-all;
+.odds-grid-box {
+  @apply w-12 h-10 flex flex-col items-center justify-center text-[10px] font-bold border-r border-white/20 cursor-pointer transition-all hover:brightness-95 active:scale-95;
 }
 
-.odds-blue {
-  @apply bg-[#72bbef] border-[#72bbef]/20 text-blue-900 hover:brightness-95;
+.odds-back {
+  @apply bg-[#72bbef] text-blue-900;
 }
 
-.odds-pink {
-  @apply bg-[#faa9ba] border-[#faa9ba]/20 text-pink-900 hover:brightness-95;
+.odds-back-light {
+  @apply bg-[#72bbef]/60 text-blue-900/70;
+}
+
+.odds-lay {
+  @apply bg-[#faa9ba] text-pink-900;
+}
+
+.odds-lay-light {
+  @apply bg-[#faa9ba]/60 text-pink-900/70;
+}
+
+.market-header {
+  @apply bg-[#4d5d6d] text-white px-3 py-1.5 text-[11px] font-bold uppercase flex justify-between items-center rounded-t-sm;
+}
+
+.scoreboard-team-row {
+  @apply flex items-center justify-between py-1 border-b border-white/5;
+}
+
+.last-ball-circle {
+  @apply w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white;
 }
 
 .sidebar-section-header {
