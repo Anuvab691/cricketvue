@@ -21,7 +21,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       await clearAllMatchesAction(db);
     }
 
-    // 1. Sync Series (Tournaments)
+    // 1. Sync Series (Tournaments) from the 2026 Pulse Feed
     const seriesList = await fetchLiveSeries();
     for (const series of seriesList) {
       if (!series.id) continue;
@@ -35,15 +35,11 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
     const liveMatchesList = await fetchLiveMatches();
     const competitions = await fetchBetfairCompetitions('4'); // 4 = Cricket
 
-    const currentMatchIds = new Set<string>();
-    let syncedCount = 0;
-
     for (const matchSummary of liveMatchesList) {
-      // Respect trial API rate limits - small throttle
+      // Respect trial API rate limits - small throttle between pulses
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
-      currentMatchIds.add(matchData.id);
 
       // Default Odds Schema (Liquidity Placeholder)
       let marketOdds = {
@@ -83,7 +79,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
             
             if (winnerMarket) {
               discoveredMarketId = winnerMarket.marketId;
-              // Step D: Fetch Market Book (Prices)
+              // Step D: Fetch Market Book (Prices) via POST
               const book = await fetchMarketBook(discoveredMarketId, '4');
               
               if (book && book.runners && book.runners.length >= 2) {
@@ -102,10 +98,11 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           }
         }
       } catch (betfairErr) {
-        // Silent fail on odds discovery to keep score updates moving
+        // Silent fail on odds discovery to keep score updates moving if Betfair is unreachable
       }
 
-      // 4. In-Place Update: Triggers real-time UI refresh
+      // 4. In-Place Update: Triggers real-time UI refresh for components using useCollection/useDoc
+      // We use setDoc with merge: true to ensure we only update scores/odds without deleting the doc.
       const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         ...matchData,
@@ -136,27 +133,13 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           }
         ]
       }, { merge: true });
-
-      syncedCount++;
     }
 
-    // 5. Intelligent Pruning: Remove matches no longer in the live network feed
-    const existingMatchesSnap = await getDocs(collection(db, 'matches'));
-    const batch = writeBatch(db);
-    let pruneCount = 0;
+    // CRITICAL: We NO LONGER prune matches here to prevent flickering or vanishing.
+    // The user prefers the list to be stable, simply updating scores in place.
+    // Manual cleanup is available via "Purge All" in the Dashboard.
 
-    existingMatchesSnap.docs.forEach(snap => {
-      if (!currentMatchIds.has(snap.id)) {
-        batch.delete(snap.ref);
-        pruneCount++;
-      }
-    });
-
-    if (pruneCount > 0) {
-      await batch.commit();
-    }
-
-    return { success: true, count: syncedCount, pruned: pruneCount, tournamentsCount: seriesList.length };
+    return { success: true, count: liveMatchesList.length, tournamentsCount: seriesList.length };
   } catch (error: any) {
     console.error("Professional Pulse Error:", error);
     return { success: false, error: error.message };

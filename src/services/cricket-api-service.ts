@@ -38,7 +38,7 @@ export interface ExternalSeries {
 }
 
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
-const API_KEY = process.env.SPORTBEX_API_KEY || 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
+const API_KEY = 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
 
 /**
  * Core fetcher for Sportbex API with header-based authentication.
@@ -116,7 +116,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
     
-    const matchesArray = Array.isArray(json.data) ? json.data : (json.data.matches || []);
+    const matchesArray = json.data.matches || (Array.isArray(json.data) ? json.data : []);
     return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
     return [];
@@ -137,7 +137,7 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
 }
 
 /**
- * Fetches live series (tournaments) for the specified year.
+ * Fetches live series (tournaments) for the specified year using the requested endpoint.
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
@@ -160,7 +160,6 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
- * Implements robust ID sanitization to prevent URL decoding errors.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -181,10 +180,13 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
 
   const status = match.status || '';
   const isCompleted = status === 'COMPLETED' || status === 'finished';
-  const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play';
+  const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play' || !!t1.score;
 
+  // Preserve ID strictly to avoid mismatch.
   let finalId = originalId || match.id?.toString() || Math.random().toString(36).substr(2, 9);
-  finalId = decodeURIComponent(finalId).trim().replace(/\s+/g, '-').toUpperCase();
+  
+  // Sanitization: Remove spaces from IDs for URL stability
+  finalId = finalId.replace(/\s+/g, '-').toUpperCase();
 
   return {
     id: finalId,
@@ -193,7 +195,7 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     status: isCompleted ? 'finished' : (isLive ? 'live' : 'upcoming'),
     venue: match.ground || match.venue || 'Global Stadium',
     date: match.startDate || match.date || new Date().toISOString(),
-    series: match.seriesName || 'International Series',
+    series: match.seriesName || match.series || 'International Series',
     seriesId: match.seriesId?.toString(),
     teams: [homeName, awayName],
     score: scoreText,

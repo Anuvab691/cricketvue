@@ -68,10 +68,10 @@ export function MatchRow({ match }: { match: any }) {
         {/* Home Team Prices */}
         <div className="flex gap-0.5 group/odds">
           <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[34px]">
-            <span className="text-xs font-black">{homeBack > 1 ? homeBack.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{homeBack > 1.00 ? homeBack.toFixed(2) : '-'}</span>
           </Link>
           <Link href={`/match/${matchId}`} className="odds-box odds-pink w-[38px] h-[34px]">
-            <span className="text-xs font-black">{homeLay > 0 ? homeLay.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{homeLay > 0.00 ? homeLay.toFixed(2) : '-'}</span>
           </Link>
         </div>
         
@@ -80,10 +80,10 @@ export function MatchRow({ match }: { match: any }) {
         {/* Away Team Prices */}
         <div className="flex gap-0.5 group/odds">
           <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[34px]">
-            <span className="text-xs font-black">{awayBack > 1 ? awayBack.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{awayBack > 1.00 ? awayBack.toFixed(2) : '-'}</span>
           </Link>
           <Link href={`/match/${matchId}`} className="odds-box odds-pink w-[38px] h-[34px]">
-            <span className="text-xs font-black">{awayLay > 0 ? awayLay.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{awayLay > 0.00 ? awayLay.toFixed(2) : '-'}</span>
           </Link>
         </div>
       </div>
