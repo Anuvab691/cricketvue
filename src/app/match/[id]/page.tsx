@@ -25,7 +25,7 @@ export default function MatchPage() {
   const { user } = useUser();
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // Explicitly decode the ID to handle spaces and special characters from the URL
+  // CRITICAL: Explicitly decode the ID to handle spaces and encoded characters
   const rawId = params?.id as string;
   const id = rawId ? decodeURIComponent(rawId) : null;
   

@@ -101,10 +101,11 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
 }
 
 /**
- * Fetches live series (tournaments) from the network.
+ * Fetches live series (tournaments) from the network using the requested pulse URL.
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
+    // Specifically requested URL for series synchronization
     const json = await fetchFromSportbex(`live-score/series?page=1&perPage=10&year=2026`);
     if (!json || !json.data || !json.data.series) return [];
 
@@ -148,19 +149,21 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isLive = match.isLive === true || match.status === 'LIVE' || match.status === 'In Play';
 
   // ID Resolution: Prefer originalId, then explicit ID fields.
-  // If fallback to concatenation is needed, sanitize it to avoid spaces and special characters.
+  // We sanitize IDs to replace spaces with hyphens to avoid URL encoding issues.
   let finalId = originalId || 
                  match.id?.toString() || 
                  match.matchId?.toString();
 
   if (!finalId && match.seriesId && match.name) {
-    // Sanitize concatenation: Replace all whitespace with hyphens and remove problematic characters
     const safeName = match.name.toString().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
     finalId = `${match.seriesId}-${safeName}`.toUpperCase();
   }
   
   if (!finalId) {
     finalId = Math.random().toString(36).substr(2, 9);
+  } else {
+    // Sanitize any spaces in IDs to prevent %20 mismatch
+    finalId = finalId.replace(/\s+/g, '-');
   }
 
   return {

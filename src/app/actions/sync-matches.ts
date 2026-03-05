@@ -10,7 +10,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
   try {
     // 1. Sync Series (Tournaments)
     const seriesList = await fetchLiveSeries();
-    let seriesSynced = 0;
+    let seriesSyncedCount = 0;
     for (const series of seriesList) {
       if (!series.id) continue;
       const seriesRef = doc(db, 'tournaments', series.id);
@@ -22,14 +22,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
         status: series.status,
         lastUpdated: new Date().toISOString()
       }, { merge: true });
-      seriesSynced++;
+      seriesSyncedCount++;
     }
 
     // 2. Sync Live Matches
     const liveMatches = await fetchLiveMatches();
     if (!liveMatches || liveMatches.length === 0) {
       console.log("Sync Engine: No live matches found on network scanning.");
-      return { success: true, count: 0, tournamentsCount: seriesSynced };
+      return { success: true, count: 0, tournamentsCount: seriesSyncedCount };
     }
 
     let syncedCount = 0;
@@ -37,8 +37,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
       // Delay for Rate Limiting (1.2s between calls for Trial keys)
       await new Promise(resolve => setTimeout(resolve, 1200));
       
-      // We fetch detailed data using the ID from the list to ensure consistency
-      // CRITICAL: Ensure match.id exists before calling fetchMatchDetail
       if (!match.id) continue;
       
       const detail = await fetchMatchDetail(match.id);
@@ -47,7 +45,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const matchId = match.id;
       const matchRef = doc(db, 'matches', matchId);
 
-      // Map Teams (Ensuring Team A and Team B are captured from nested teams object)
+      // Map Teams
       const teamA = matchData.teams[0] || 'TBA';
       const teamB = matchData.teams[1] || 'TBA';
 
@@ -82,7 +80,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       syncedCount++;
     }
 
-    return { success: true, count: syncedCount, tournamentsCount: seriesSynced };
+    return { success: true, count: syncedCount, tournamentsCount: seriesSyncedCount };
   } catch (error: any) {
     console.error("Sync Engine Failure:", error);
     return { success: false, error: error.message };
