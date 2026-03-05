@@ -1,8 +1,9 @@
+
 'use server';
 
 /**
- * @fileOverview High-Performance Server-Side Service for Sportbex API.
- * Integrated with Betfair Exchange endpoints for live market discovery and professional odds.
+ * @fileOverview Professional Service for Sportbex API.
+ * Integrated with Betfair Discovery Chain for live market mapping.
  */
 
 export interface ExternalMatch {
@@ -22,9 +23,7 @@ export interface ExternalMatch {
   currentScore?: string;
   matchStarted: boolean;
   matchEnded: boolean;
-  rawStatusText?: string;
   statusText?: string;
-  betfairId?: string;
   marketId?: string;
   eventId?: string;
   odds?: {
@@ -47,13 +46,8 @@ export interface ExternalSeries {
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
 const API_KEY = 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
 
-/**
- * Core fetcher for Sportbex API with header-based authentication.
- */
 async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: any) {
-  const cleanEndpoint = endpoint.replace(/^\//, '');
-  const url = `${SPORTBEX_BASE_URL}${cleanEndpoint}`;
-
+  const url = `${SPORTBEX_BASE_URL}${endpoint.replace(/^\//, '')}`;
   try {
     const options: RequestInit = {
       method,
@@ -64,16 +58,9 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
         'Content-Type': 'application/json'
       }
     };
-
-    if (body && method === 'POST') {
-      options.body = JSON.stringify(body);
-    }
-
+    if (body && method === 'POST') options.body = JSON.stringify(body);
     const response = await fetch(url, options);
-    if (!response.ok) {
-      return null;
-    }
-
+    if (!response.ok) return null;
     return await response.json();
   } catch (error: any) {
     console.error(`Sportbex Error [${endpoint}]:`, error.message);
@@ -82,7 +69,7 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 }
 
 /**
- * Betfair Discovery Phase 1: Fetches active competitions for a sport (4 = Cricket).
+ * Discovery Phase 1: All Ongoing Competitions
  */
 export async function fetchBetfairCompetitions(sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/${sportId}`);
@@ -90,7 +77,7 @@ export async function fetchBetfairCompetitions(sportId: string = '4') {
 }
 
 /**
- * Betfair Discovery Phase 2: Fetches events and their associated markets for a competition.
+ * Discovery Phase 2: All Events for a Competition
  */
 export async function fetchBetfairEvents(competitionId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/event/${sportId}/${competitionId}`);
@@ -98,21 +85,16 @@ export async function fetchBetfairEvents(competitionId: string, sportId: string 
 }
 
 /**
- * Betfair Pulse: Fetches live professional odds using marketIds.
- * Uses the POST /betfair/listMarketBook/{sportId} endpoint.
+ * Discovery Phase 3: Market Odds via listMarketBook (POST)
  */
 export async function fetchMarketOdds(marketIds: string[], sportId: string = '4') {
   if (!marketIds || marketIds.length === 0) return null;
-  
-  const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
-    marketIds: marketIds 
-  });
+  const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { marketIds });
   return json?.data || null;
 }
 
 /**
- * Betfair Fancy Pulse: Fetches live Fancy and Bookmaker odds for a specific event.
- * Uses the GET /betfair/fancy-bookmaker-odds/{sportId}/{eventId} endpoint.
+ * Discovery Phase 4: Fancy and Bookmaker Odds (GET)
  */
 export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
   if (!eventId) return null;
@@ -121,8 +103,7 @@ export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
 }
 
 /**
- * Premium Fancy Pulse: Fetches live Premium Fancy markets for a specific event.
- * Uses the GET /betfair/getPremium/{sportId}/{eventId} endpoint.
+ * Discovery Phase 5: Premium Fancy (GET)
  */
 export async function fetchPremiumFancy(eventId: string, sportId: string = '4') {
   if (!eventId) return null;
@@ -130,14 +111,10 @@ export async function fetchPremiumFancy(eventId: string, sportId: string = '4') 
   return json?.data || null;
 }
 
-/**
- * Fetches all live matches currently active on the network.
- */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
-    
     const matchesArray = json.data.matches || (Array.isArray(json.data) ? json.data : []);
     return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
@@ -145,9 +122,6 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   }
 }
 
-/**
- * Fetches deep detail for a specific match ID.
- */
 export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch | null> {
   try {
     const json = await fetchFromSportbex(`live-score/match/${matchId}`);
@@ -158,14 +132,10 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
   }
 }
 
-/**
- * Fetches live series (tournaments).
- */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
     const json = await fetchFromSportbex(`live-score/series?page=1&perPage=10&year=2025`);
     if (!json || !json.data || !json.data.series) return [];
-
     return json.data.series.map((s: any) => ({
       id: s.id?.toString(),
       name: s.name || 'Unknown Series',
@@ -180,45 +150,24 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   }
 }
 
-/**
- * Transformer: Maps Sportbex JSON to Terminal Match schema with robust team extraction.
- */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
-  
   let homeName = match.t1_name || match.home_team_name || 'TBA';
   let awayName = match.t2_name || match.away_team_name || 'TBA';
 
-  if (homeName === 'TBA' || homeName === 'Unknown') {
-    if (Array.isArray(match.teams) && match.teams.length >= 2) {
-      homeName = match.teams[0]?.name || match.teams[0] || 'TBA';
-      awayName = match.teams[1]?.name || match.teams[1] || 'TBA';
-    } else if (teamsData.t1 || teamsData.t2) {
-      homeName = teamsData.t1?.name || 'TBA';
-      awayName = teamsData.t2?.name || 'TBA';
-    } else if (match.teamA && match.teamB) {
-      homeName = match.teamA;
-      awayName = match.teamB;
-    }
+  if (homeName === 'TBA' && Array.isArray(match.teams) && match.teams.length >= 2) {
+    homeName = match.teams[0]?.name || match.teams[0] || 'TBA';
+    awayName = match.teams[1]?.name || match.teams[1] || 'TBA';
+  } else if (homeName === 'TBA' && (teamsData.t1 || teamsData.t2)) {
+    homeName = teamsData.t1?.name || 'TBA';
+    awayName = teamsData.t2?.name || 'TBA';
   }
   
-  let scoreText = '';
-  const t1 = teamsData.t1 || {};
-  const t2 = teamsData.t2 || {};
-  
-  if (t1.score && t2.score) {
-    scoreText = `${t1.score} v ${t2.score}`;
-  } else if (t1.score || t2.score) {
-    scoreText = t1.score || t2.score;
-  } else if (match.score) {
-    scoreText = match.score;
-  } else if (match.current_score) {
-    scoreText = match.current_score;
-  }
+  let scoreText = match.current_score || match.score || (teamsData.t1?.score ? `${teamsData.t1.score} v ${teamsData.t2?.score}` : '');
 
   const statusRaw = (match.status || '').toUpperCase();
-  const isCompleted = statusRaw === 'COMPLETED' || statusRaw === 'FINISHED' || statusRaw === 'RESULT';
-  const isLive = match.isLive === true || statusRaw === 'LIVE' || statusRaw === 'IN PLAY' || !!t1.score || !!match.current_score;
+  const isCompleted = ['COMPLETED', 'FINISHED', 'RESULT'].includes(statusRaw);
+  const isLive = match.isLive === true || statusRaw === 'LIVE' || !!scoreText;
 
   let finalId = originalId || match.id?.toString() || `${homeName}-${awayName}`;
   finalId = finalId.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toUpperCase();
@@ -240,8 +189,6 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     currentScore: scoreText,
     matchStarted: isLive || isCompleted,
     matchEnded: isCompleted,
-    rawStatusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled'),
-    statusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled'),
-    marketId: match.marketId || null
+    statusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled')
   };
 }
