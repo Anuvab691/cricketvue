@@ -1,11 +1,12 @@
+
 'use client';
 
-import { useFirestore, useUser, useDoc } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useFirestore, useUser, useDoc, useCollection } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { 
   UserCircle, 
-  Zap, ShieldCheck, Globe, Database
+  Zap, ShieldCheck, Globe, Database, Loader2
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { useState } from 'react';
@@ -15,6 +16,8 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { GamesGrid } from '@/components/dashboard/GamesGrid';
+import { MatchRow } from '@/components/dashboard/MatchRow';
+import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -31,19 +34,18 @@ export default function Dashboard() {
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
 
-  const settingsRef = useMemoFirebase(() => {
+  const matchesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return doc(firestore, 'app_settings', 'global');
+    return collection(firestore, 'matches');
   }, [firestore]);
-  const { data: settings } = useDoc(settingsRef);
+  const { data: matches, loading: matchesLoading } = useCollection(matchesQuery);
 
   const handleLogout = async () => {
     if (auth) await logout(auth);
     router.push('/login');
   };
 
-  // Match Feed: FORCED EMPTY BY USER REQUEST
-  const filteredMatches: any[] = [];
+  const filteredMatches = matches || [];
 
   return (
     <div className="flex min-h-screen bg-[#f8f9fa] text-slate-900">
@@ -58,11 +60,7 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="text-[10px] bg-white/10 px-2 py-1 rounded flex items-center gap-1 text-white/50">
-                <ShieldCheck size={10} /> FEED SUSPENDED
-              </div>
-            </div>
+            <SyncDataButton />
             <div className="flex items-center gap-2 text-xs font-bold text-white">
               <span className="opacity-80">Balance:</span>
               <span className="text-yellow-400">
@@ -96,11 +94,11 @@ export default function Dashboard() {
         <div className="exchange-sub-nav">
           <div className="flex items-center gap-4 w-full">
             <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-red-400 text-red-400" /> Network Suspended
+              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Network Pulse Active
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap text-slate-500 font-bold uppercase">
-                Matching Terminal is currently offline by request.
+                Sportbex Terminal: Connected to Global Exchange Feed.
               </p>
             </div>
           </div>
@@ -116,16 +114,29 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="border-x border-slate-200 shadow-sm">
-            <div className="p-20 text-center flex flex-col items-center gap-4 bg-white border-b border-slate-200">
-              <Database size={40} className="text-slate-200" />
-              <div className="space-y-1">
-                <p className="text-sm font-black uppercase text-slate-400">Match Feed Empty</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  The terminal is not currently fetching live data.
-                </p>
+          <div className="border-x border-slate-200 shadow-sm bg-white">
+            {matchesLoading ? (
+              <div className="p-20 text-center flex flex-col items-center gap-2">
+                <Loader2 className="animate-spin text-primary" size={32} />
+                <p className="text-[10px] font-bold uppercase text-slate-400">Fetching Market Data...</p>
               </div>
-            </div>
+            ) : filteredMatches.length > 0 ? (
+              <div className="divide-y divide-slate-100">
+                {filteredMatches.map((match: any) => (
+                  <MatchRow key={match.id} match={match} />
+                ))}
+              </div>
+            ) : (
+              <div className="p-20 text-center flex flex-col items-center gap-4">
+                <Database size={40} className="text-slate-200" />
+                <div className="space-y-1">
+                  <p className="text-sm font-black uppercase text-slate-400">Match Feed Empty</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    Use the 'Sync Now' button to pull fresh matches from the network.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-6">
@@ -140,7 +151,7 @@ export default function Dashboard() {
         <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
             <Globe size={10} />
-            Network Data: Suspended
+            Sportbex Pro Data Pulse: Operational
           </div>
         </footer>
       </main>

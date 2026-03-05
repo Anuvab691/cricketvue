@@ -1,19 +1,28 @@
+
 'use client';
 
-import { useUser } from '@/firebase';
+import { useUser, useFirestore, useCollection } from '@/firebase';
 import { 
-  Trophy, Zap, LogIn, Database
+  Trophy, Zap, LogIn, Database, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { collection, query, limit } from 'firebase/firestore';
+import { useMemoFirebase } from '@/firebase/use-memo-firebase';
+import { MatchCard } from '@/components/dashboard/MatchCard';
 
 export default function LandingPage() {
   const { user } = useUser();
+  const firestore = useFirestore();
 
-  // Match Feed: FORCED EMPTY BY USER REQUEST
-  const featuredMatches: any[] = [];
+  const matchesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'matches'), limit(3));
+  }, [firestore]);
+  
+  const { data: featuredMatches, loading } = useCollection(matchesQuery);
 
   const heroPlaceholder = PlaceHolderImages.find(p => p.id === 'match-banner-1') || {
     imageUrl: 'https://picsum.photos/seed/cricket1/1200/600',
@@ -86,15 +95,28 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-20 text-center flex flex-col items-center gap-4">
-          <Database size={48} className="text-slate-200" />
-          <div className="space-y-2">
-            <p className="text-lg font-black uppercase text-slate-400">Terminal Suspended</p>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-              Live feed is currently disabled by administrator.
-            </p>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Consulting Network Data...</p>
           </div>
-        </div>
+        ) : featuredMatches && featuredMatches.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {featuredMatches.map((match) => (
+              <MatchCard key={match.id} match={match} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-20 text-center flex flex-col items-center gap-4">
+            <Database size={48} className="text-slate-200" />
+            <div className="space-y-2">
+              <p className="text-lg font-black uppercase text-slate-400">Terminal Offline</p>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
+                No active matches found in the global feed.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       <footer className="bg-white border-t border-slate-200 py-10">
