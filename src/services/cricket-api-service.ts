@@ -12,8 +12,11 @@ export interface ExternalMatch {
   status: string;
   venue: string;
   date: string;
+  startTime: string; // Map date to startTime for schema
   series?: string;
   seriesId?: string;
+  teamA: string;
+  teamB: string;
   teams: string[];
   score?: string;
   matchStarted: boolean;
@@ -100,7 +103,6 @@ export async function fetchBetfairMarkets(eventId: string, sportId: string = '4'
 
 /**
  * Betfair Pulse: Fetches the Market Book (odds/prices) via POST.
- * Payload must match: {"marketIds": "marketId"}
  */
 export async function fetchMarketBook(marketId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
@@ -138,7 +140,7 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
 }
 
 /**
- * Fetches live series (tournaments) for the specified year.
+ * Fetches live series (tournaments).
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
@@ -161,17 +163,26 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
- * Sanitizes IDs to ensure they are URL-safe and stable for "in-place" updates.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
-  const t1 = teamsData.t1 || {};
-  const t2 = teamsData.t2 || {};
+  
+  // Robust Team Name Extraction
+  let homeName = 'TBA';
+  let awayName = 'TBA';
 
-  const homeName = t1.name || match.home_team_name || match.teamA || 'TBA';
-  const awayName = t2.name || match.away_team_name || match.teamB || 'TBA';
+  if (Array.isArray(match.teams)) {
+    homeName = match.teams[0]?.name || match.teams[0] || 'TBA';
+    awayName = match.teams[1]?.name || match.teams[1] || 'TBA';
+  } else {
+    homeName = teamsData.t1?.name || match.home_team_name || match.teamA || 'TBA';
+    awayName = teamsData.t2?.name || match.away_team_name || match.teamB || 'TBA';
+  }
   
   let scoreText = '';
+  const t1 = teamsData.t1 || {};
+  const t2 = teamsData.t2 || {};
+  
   if (t1.score && t2.score) {
     scoreText = `${t1.score} v ${t2.score}`;
   } else if (t1.score || t2.score) {
@@ -180,14 +191,13 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     scoreText = match.score;
   }
 
-  const status = match.status || '';
-  const isCompleted = status === 'COMPLETED' || status === 'finished';
-  const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play' || !!t1.score;
+  const statusRaw = (match.status || '').toUpperCase();
+  const isCompleted = statusRaw === 'COMPLETED' || statusRaw === 'FINISHED';
+  const isLive = match.isLive === true || statusRaw === 'LIVE' || statusRaw === 'IN PLAY' || !!t1.score;
+  const matchStartTime = match.startDate || match.date || new Date().toISOString();
 
-  // Stable ID Generation: Prioritize match.id, fallback to sanitized names.
+  // Stable ID Generation
   let finalId = originalId || match.id?.toString() || `${homeName} vs ${awayName}`;
-  
-  // Sanitize: Replace spaces and special chars with hyphens, uppercase for stability.
   finalId = finalId.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toUpperCase();
 
   return {
@@ -196,9 +206,12 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     matchType: match.format || 'cricket',
     status: isCompleted ? 'finished' : (isLive ? 'live' : 'upcoming'),
     venue: match.ground || match.venue || 'Global Stadium',
-    date: match.startDate || match.date || new Date().toISOString(),
+    date: matchStartTime,
+    startTime: matchStartTime,
     series: match.seriesName || match.series || 'International Series',
     seriesId: match.seriesId?.toString(),
+    teamA: homeName,
+    teamB: awayName,
     teams: [homeName, awayName],
     score: scoreText,
     matchStarted: isLive || isCompleted,

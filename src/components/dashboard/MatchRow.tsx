@@ -38,7 +38,7 @@ export function MatchRow({ match }: { match: any }) {
       <div className="flex-1 flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <Link href={`/match/${matchId}`} className="font-black uppercase italic tracking-tighter text-slate-800 hover:text-primary transition-all text-sm md:text-base">
-            {match.teams?.[0] || 'TBA'} v {match.teams?.[1] || 'TBA'}
+            {match.teamA || 'TBA'} v {match.teamB || 'TBA'}
           </Link>
           <span className="text-[10px] text-slate-400 font-bold">/ {format(matchDate, 'dd/MM HH:mm')}</span>
           {isLive && (
@@ -49,7 +49,7 @@ export function MatchRow({ match }: { match: any }) {
           )}
         </div>
         
-        {/* Score Display: Positioned prominently below the game title */}
+        {/* Score Display */}
         {match.currentScore && (
           <div className="flex items-center gap-2">
             <span className="text-xs md:text-sm font-mono text-primary font-black bg-primary/5 px-2 py-0.5 rounded-sm border border-primary/10">
@@ -75,7 +75,6 @@ export function MatchRow({ match }: { match: any }) {
       </div>
 
       <div className="w-[180px] flex justify-around items-center shrink-0">
-        {/* Home Team Prices (Betfair Professional) */}
         <div className="flex gap-0.5">
           <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[36px]">
             <span className="text-xs font-black">{homeBack > 1.00 ? homeBack.toFixed(2) : '-'}</span>
@@ -87,7 +86,6 @@ export function MatchRow({ match }: { match: any }) {
         
         <div className="w-px h-8 bg-slate-100 hidden md:block" />
 
-        {/* Away Team Prices (Betfair Professional) */}
         <div className="flex gap-0.5">
           <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[36px]">
             <span className="text-xs font-black">{awayBack > 1.00 ? awayBack.toFixed(2) : '-'}</span>
