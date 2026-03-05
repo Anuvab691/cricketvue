@@ -9,11 +9,12 @@ export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
   
-  // Odds decimals from the Betfair Pulse
-  const homeBack = match.odds?.home?.back || 1.00;
-  const homeLay = match.odds?.home?.lay || 0.00;
-  const awayBack = match.odds?.away?.back || 1.00;
-  const awayLay = match.odds?.away?.lay || 0.00;
+  // Professional Odds Mapping
+  // Ensure we display '-' if the data is 1.00/0.00 (default fallback)
+  const homeBack = match.odds?.home?.back;
+  const homeLay = match.odds?.home?.lay;
+  const awayBack = match.odds?.away?.back;
+  const awayLay = match.odds?.away?.lay;
 
   const [lastUpdateText, setLastUpdateText] = useState('');
 
@@ -33,6 +34,11 @@ export function MatchRow({ match }: { match: any }) {
 
   const matchId = match.id || '';
 
+  const formatPrice = (p: any) => {
+    if (!p || p === 1 || p === 0) return '-';
+    return p.toFixed(2);
+  };
+
   return (
     <div className="match-row group h-auto min-h-[90px] py-4">
       <div className="flex-1 flex flex-col gap-1.5">
@@ -49,7 +55,6 @@ export function MatchRow({ match }: { match: any }) {
           )}
         </div>
         
-        {/* Score Display - Corrected field mapping */}
         {(match.currentScore || match.score) && (
           <div className="flex items-center gap-2">
             <span className="text-xs md:text-sm font-mono text-primary font-black bg-primary/5 px-2 py-0.5 rounded-sm border border-primary/10">
@@ -77,10 +82,10 @@ export function MatchRow({ match }: { match: any }) {
       <div className="w-[180px] flex justify-around items-center shrink-0">
         <div className="flex gap-0.5">
           <div className="odds-box odds-blue w-[42px] h-[40px]">
-            <span className="text-xs font-black">{homeBack > 1.00 ? homeBack.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{formatPrice(homeBack)}</span>
           </div>
           <div className="odds-box odds-pink w-[42px] h-[40px]">
-            <span className="text-xs font-black">{homeLay > 0.00 ? homeLay.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{formatPrice(homeLay)}</span>
           </div>
         </div>
         
@@ -88,10 +93,10 @@ export function MatchRow({ match }: { match: any }) {
 
         <div className="flex gap-0.5">
           <div className="odds-box odds-blue w-[42px] h-[40px]">
-            <span className="text-xs font-black">{awayBack > 1.00 ? awayBack.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{formatPrice(awayBack)}</span>
           </div>
           <div className="odds-box odds-pink w-[42px] h-[40px]">
-            <span className="text-xs font-black">{awayLay > 0.00 ? awayLay.toFixed(2) : '-'}</span>
+            <span className="text-xs font-black">{formatPrice(awayLay)}</span>
           </div>
         </div>
       </div>

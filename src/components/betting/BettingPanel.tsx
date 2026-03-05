@@ -19,6 +19,8 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
       return;
     }
 
+    if (!odds || odds === 0) return;
+
     setLoading(true);
     const stakeVal = parseFloat(stake);
     
@@ -56,6 +58,11 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
   const premiumRunners = premiumFancyOverride && premiumFancyOverride.length > 0 
     ? premiumFancyOverride 
     : (premiumFancyMarket?.selections || []);
+
+  const formatPrice = (p: any) => {
+    if (!p || p === 0 || p === 1) return '-';
+    return p.toFixed(2);
+  };
 
   return (
     <div className="space-y-4">
@@ -103,8 +110,8 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
 
           <div className="divide-y divide-slate-100">
             {matchWinnerMarket?.selections.map((selection: any) => {
-              const backOdds = selection.odds || 1.0;
-              const layOdds = selection.layOdds || (backOdds > 1 ? backOdds + 0.02 : 0);
+              const backLiquidity = selection.backLiquidity || [];
+              const layLiquidity = selection.layLiquidity || [];
               
               return (
                 <div key={selection.id} className="flex items-center justify-between h-14 hover:bg-slate-50 transition-colors">
@@ -114,24 +121,26 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
                   </div>
 
                   <div className="grid grid-cols-6 w-[288px] h-full items-center">
-                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds - 0.02, false)}>
-                      <span>{(backOdds - 0.02).toFixed(2)}</span>
+                    {/* Multi-Level Back Prices */}
+                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[2]?.price)}>
+                      <span>{formatPrice(backLiquidity[2]?.price)}</span>
                     </div>
-                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds - 0.01, false)}>
-                      <span>{(backOdds - 0.01).toFixed(2)}</span>
+                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[1]?.price)}>
+                      <span>{formatPrice(backLiquidity[1]?.price)}</span>
                     </div>
-                    <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds, false)}>
-                      <span className="text-xs">{backOdds.toFixed(2)}</span>
+                    <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[0]?.price)}>
+                      <span className="text-xs">{formatPrice(backLiquidity[0]?.price)}</span>
                     </div>
 
-                    <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds, true)}>
-                      <span className="text-xs">{layOdds.toFixed(2)}</span>
+                    {/* Multi-Level Lay Prices */}
+                    <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[0]?.price, true)}>
+                      <span className="text-xs">{formatPrice(layLiquidity[0]?.price)}</span>
                     </div>
-                    <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds + 0.01, true)}>
-                      <span>{(layOdds + 0.01).toFixed(2)}</span>
+                    <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[1]?.price, true)}>
+                      <span>{formatPrice(layLiquidity[1]?.price)}</span>
                     </div>
-                    <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds + 0.02, true)}>
-                      <span>{(layOdds + 0.02).toFixed(2)}</span>
+                    <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[2]?.price, true)}>
+                      <span>{formatPrice(layLiquidity[2]?.price)}</span>
                     </div>
                   </div>
                 </div>
@@ -140,6 +149,7 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
           </div>
         </div>
 
+        {/* Bookmaker, Fancy, and Premium Fancy sections follow same pattern... */}
         <div className="bg-white border border-slate-200 rounded-sm shadow-sm">
           <div className="market-header bg-[#34495e]">
             <span>Bookmaker</span>
@@ -154,10 +164,10 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
                     </div>
                     <div className="flex">
                       <div className="odds-grid-box odds-back w-24 border-r border-slate-200" onClick={() => handlePlaceBet(bookmakerMarket, selection, selection.odds, false)}>
-                        <span className="text-xs">{selection.odds.toFixed(2)}</span>
+                        <span className="text-xs">{formatPrice(selection.odds)}</span>
                       </div>
                       <div className="odds-grid-box odds-lay w-24" onClick={() => handlePlaceBet(bookmakerMarket, selection, selection.layOdds, true)}>
-                        <span className="text-xs">{selection.layOdds.toFixed(2)}</span>
+                        <span className="text-xs">{formatPrice(selection.layOdds)}</span>
                       </div>
                     </div>
                  </div>

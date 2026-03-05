@@ -42,6 +42,20 @@ export interface ExternalSeries {
   resultText?: string;
 }
 
+export interface NormalizedMarketBook {
+  marketId: string;
+  status: string;
+  inplay: boolean;
+  totalMatched: number;
+  runners: {
+    selectionId: number;
+    runnerName?: string;
+    back: { price: number; size: number }[];
+    lay: { price: number; size: number }[];
+    lastPriceTraded: number;
+  }[];
+}
+
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
 const API_KEY = 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
 
@@ -70,8 +84,9 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 
 /**
  * Professional implementation to fetch market odds via listMarketBook.
+ * Implements the normalized transformer to ensure UI receives clean data.
  */
-export async function fetchMarketOdds(marketId: string) {
+export async function fetchMarketOdds(marketId: string): Promise<NormalizedMarketBook | null> {
   const apiKey = process.env.SPORTBEX_API_KEY || API_KEY;
 
   if (!apiKey) {
@@ -99,8 +114,36 @@ export async function fetchMarketOdds(marketId: string) {
       return null;
     }
 
-    const data = await res.json();
-    return data.data; // Returns the array of market books
+    const json = await res.json();
+    const data = json.data?.[0];
+
+    if (!data) return null;
+
+    // Server-side verification log
+    console.log("marketBook sample:", JSON.stringify(data.runners?.[0], null, 2));
+
+    // Professional Normalization Transformer
+    const normalized: NormalizedMarketBook = {
+      marketId: data.marketId,
+      status: data.status,
+      inplay: !!data.inplay,
+      totalMatched: data.totalMatched || 0,
+      runners: (data.runners || []).map((runner: any) => ({
+        selectionId: runner.selectionId,
+        runnerName: runner.runnerName,
+        lastPriceTraded: runner.lastPriceTraded || 0,
+        back: (runner.ex?.availableToBack || []).slice(0, 3).map((b: any) => ({
+          price: b.price || 0,
+          size: b.size || 0
+        })),
+        lay: (runner.ex?.availableToLay || []).slice(0, 3).map((l: any) => ({
+          price: l.price || 0,
+          size: l.size || 0
+        }))
+      }))
+    };
+
+    return normalized;
 
   } catch (err) {
     console.error("Sportbex odds fetch error:", err);

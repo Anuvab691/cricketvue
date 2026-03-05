@@ -57,11 +57,15 @@ export async function syncCricketMatchesAction(db: Firestore) {
         });
 
         if (matchedMatch) {
-          const market = betfairEvent.markets?.find((m: any) => 
-            ['Match Odds', 'Winner', 'Match Betting'].some(term => 
-              (m.marketName || '').toLowerCase().includes(term.toLowerCase())
-            )
+          // SELECT MARKET: Look for "Match Odds" case-insensitive
+          let market = betfairEvent.markets?.find((m: any) => 
+            (m.marketName || '').toLowerCase().includes("match odds")
           );
+
+          // Fallback to first market if not found
+          if (!market && betfairEvent.markets?.[0]) {
+            market = betfairEvent.markets[0];
+          }
 
           if (market) {
             matchToBetfairMap.set(matchedMatch.id, {
@@ -83,48 +87,39 @@ export async function syncCricketMatchesAction(db: Firestore) {
       let professionalOdds = null;
 
       if (betfairInfo) {
-        // Phase 3: High-Frequency Pulse (listMarketBook POST) for this specific marketId
-        const marketBooks = await fetchMarketOdds(betfairInfo.marketId);
-        const book = (marketBooks || []).find((b: any) => b && b.marketId === betfairInfo.marketId);
+        // Phase 3: High-Frequency Pulse (listMarketBook POST)
+        const marketBook = await fetchMarketOdds(betfairInfo.marketId);
 
-        if (book && book.runners && book.runners.length >= 2) {
-          // Professional Runner-to-Team mapping
-          // Runner 1 (Back/Lay)
-          const runner1 = book.runners[0];
-          // Runner 2 (Back/Lay)
-          const runner2 = book.runners[1];
+        if (marketBook && marketBook.runners && marketBook.runners.length >= 2) {
+          // Professional Runner Mapping
+          const runner1 = marketBook.runners[0];
+          const runner2 = marketBook.runners[1];
 
           professionalOdds = {
             home: { 
-              back: runner1?.ex?.availableToBack?.[0]?.price || 1.00,
-              lay: runner1?.ex?.availableToLay?.[0]?.price || 0.00
+              back: runner1.back?.[0]?.price || 1.00,
+              lay: runner1.lay?.[0]?.price || 0.00
             },
             away: { 
-              back: runner2?.ex?.availableToBack?.[0]?.price || 1.00,
-              lay: runner2?.ex?.availableToLay?.[0]?.price || 0.00
+              back: runner2.back?.[0]?.price || 1.00,
+              lay: runner2.lay?.[0]?.price || 0.00
             }
           };
 
-          // Update match_winner sub-collection
+          // Update match_winner sub-collection with normalized data
           const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
           setDoc(marketSubRef, {
             id: 'match_winner',
             type: 'match_winner',
             status: 'open',
-            selections: [
-              { 
-                id: runner1.selectionId?.toString() || 'home', 
-                name: matchData.teamA, 
-                odds: professionalOdds.home.back, 
-                layOdds: professionalOdds.home.lay 
-              },
-              { 
-                id: runner2.selectionId?.toString() || 'away', 
-                name: matchData.teamB, 
-                odds: professionalOdds.away.back, 
-                layOdds: professionalOdds.away.lay 
-              }
-            ]
+            selections: marketBook.runners.map((r, idx) => ({
+              id: r.selectionId.toString(),
+              name: idx === 0 ? matchData.teamA : (idx === 1 ? matchData.teamB : r.runnerName || 'Draw'),
+              odds: r.back?.[0]?.price || 1.00,
+              layOdds: r.lay?.[0]?.price || 0.00,
+              backLiquidity: r.back || [],
+              layLiquidity: r.lay || []
+            }))
           }, { merge: true });
         }
 
@@ -182,12 +177,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
       setDoc(matchRef, {
         ...matchData,
         betfairEventId: betfairInfo?.eventId || null,
+        betfairMarketId: betfairInfo?.marketId || null,
         odds: professionalOdds,
         lastUpdated: new Date().toISOString()
       }, { merge: true });
     }
 
-    // 6. Pruning "No More, No Less"
+    // 6. Pruning
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
