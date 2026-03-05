@@ -86,13 +86,14 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
 
 /**
  * Fetches deep-dive match data for a specific match ID.
+ * Accepts the originalId to ensure the returned object maintains ID consistency.
  */
 export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch | null> {
   try {
     const json = await fetchFromSportbex(`live-score/match/${matchId}`);
     if (!json || !json.data) return null;
 
-    return transformSportbexLiveMatch(json.data);
+    return transformSportbexLiveMatch(json.data, matchId);
   } catch (e) {
     return null;
   }
@@ -103,7 +104,6 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
-    // URL: live-score/series?page=1&perPage=10&year=2026
     const json = await fetchFromSportbex(`live-score/series?page=1&perPage=10&year=2026`);
     if (!json || !json.data || !json.data.series) return [];
 
@@ -123,29 +123,38 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transforms Sportbex Live Match schema into Terminal Match schema.
- * Updated to handle the nested teams object (t1/t2) and result messages.
+ * @param match The raw API response object.
+ * @param originalId Optional ID to override the calculated ID (useful for detail fetches).
  */
-function transformSportbexLiveMatch(match: any): ExternalMatch {
+function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
   const t1 = teamsData.t1 || {};
   const t2 = teamsData.t2 || {};
 
-  const homeName = t1.name || match.home_team_name || 'TBA';
-  const awayName = t2.name || match.away_team_name || 'TBA';
+  const homeName = t1.name || match.home_team_name || match.teama || 'TBA';
+  const awayName = t2.name || match.away_team_name || match.teamb || 'TBA';
   
-  let scoreText = match.score || '';
+  let scoreText = '';
   if (t1.score && t2.score) {
     scoreText = `${homeName}: ${t1.score} | ${awayName}: ${t2.score}`;
   } else if (t1.score || t2.score) {
     scoreText = `${t1.score || '0/0'} vs ${t2.score || '0/0'}`;
+  } else if (match.score) {
+    scoreText = match.score;
   }
 
   const isCompleted = match.status === 'COMPLETED' || match.status === 'finished';
-  const isLive = match.isLive === true || match.status === 'LIVE';
+  const isLive = match.isLive === true || match.status === 'LIVE' || match.status === 'In Play';
+
+  // ID Resolution: Prefer originalId, then explicit ID fields, then generate from series/name
+  const finalId = originalId || 
+                 match.id?.toString() || 
+                 match.matchId?.toString() || 
+                 (match.seriesId && match.name ? `${match.seriesId}-${match.name}` : Math.random().toString(36).substr(2, 9));
 
   return {
-    id: match.id?.toString() || match.matchId?.toString() || match.seriesId + '-' + match.name,
-    name: `${homeName} v ${awayName}`,
+    id: finalId,
+    name: match.name || `${homeName} v ${awayName}`,
     matchType: match.format || 'cricket',
     status: isCompleted ? 'finished' : (isLive ? 'live' : 'upcoming'),
     venue: match.ground || match.venue || 'Global Stadium',
@@ -156,6 +165,6 @@ function transformSportbexLiveMatch(match: any): ExternalMatch {
     score: scoreText,
     matchStarted: isLive || isCompleted,
     matchEnded: isCompleted,
-    rawStatusText: match.result?.message || match.status_text || match.status || 'In Play'
+    rawStatusText: match.result?.message || match.status_text || match.status || (isLive ? 'In Play' : 'Scheduled')
   };
 }

@@ -4,7 +4,7 @@ import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebas
 import { fetchLiveMatches, fetchMatchDetail, fetchLiveSeries } from '@/services/cricket-api-service';
 
 /**
- * Sync Engine: Updated to sync both Matches and Tournaments (Series).
+ * Sync Engine: Synchronizes Matches and Tournaments from the Sportbex professional feed.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -27,7 +27,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     // 2. Sync Live Matches
     const liveMatches = await fetchLiveMatches();
     if (!liveMatches || liveMatches.length === 0) {
-      console.log("Sync Engine: No live matches found on network.");
+      console.log("Sync Engine: No live matches found on network scanning.");
       return { success: true, count: 0, tournamentsCount: seriesSynced };
     }
 
@@ -36,10 +36,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
       // Delay for Rate Limiting (1.2s between calls for Trial keys)
       await new Promise(resolve => setTimeout(resolve, 1200));
       
+      // We fetch detailed data using the ID from the list to ensure consistency
       const detail = await fetchMatchDetail(match.id);
       const matchData = detail || match;
 
-      const matchRef = doc(db, 'matches', matchData.id);
+      // CRITICAL: Ensure we use the ID from the list to avoid "Record Not Found" errors
+      const matchId = match.id;
+      const matchRef = doc(db, 'matches', matchId);
+
       await setDoc(matchRef, {
         teamA: matchData.teams[0] || 'TBA',
         teamB: matchData.teams[1] || 'TBA',
@@ -56,8 +60,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
         }
       }, { merge: true });
 
-      // Ensure Market subcollection exists
-      const marketRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
+      // Ensure Market subcollection exists for the match winner
+      const marketRef = doc(db, 'matches', matchId, 'markets', 'match_winner');
       await setDoc(marketRef, {
         id: 'match_winner',
         type: 'match_winner',
@@ -79,7 +83,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 }
 
 /**
- * Deep Purge: Clears all matches and tournaments from the local database.
+ * Deep Purge: Clears all matches and tournaments from the local terminal database.
  */
 export async function clearAllMatchesAction(db: Firestore) {
   try {
