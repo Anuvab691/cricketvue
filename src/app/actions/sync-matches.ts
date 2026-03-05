@@ -13,16 +13,16 @@ import {
 
 /**
  * Integrated Sync Engine: Synchronizes Matches and Tournaments with a resilient Betfair Discovery Chain.
- * Includes "Fresh Slate" support to auto-purge stale records.
+ * Performs "Upserts" to ensure UI updates seamlessly without disappearing.
  */
 export async function syncCricketMatchesAction(db: Firestore, options: { clearFirst?: boolean } = {}) {
   try {
-    // 1. Fresh Slate Protocol: Clear existing matches to avoid "old scores" or stale data.
+    // 1. Optional Purge (usually only for manual cleanup)
     if (options.clearFirst) {
       await clearAllMatchesAction(db);
     }
 
-    // 2. Sync Series (Tournaments)
+    // 2. Sync Series (Tournaments) from Sportbex 2026 Feed
     const seriesList = await fetchLiveSeries();
     for (const series of seriesList) {
       if (!series.id) continue;
@@ -32,16 +32,16 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       }, { merge: true });
     }
 
-    // 3. Gathering Live Matches and Betfair Discovery Chain
+    // 3. Sync Live Matches and Betfair Odds Discovery
     const liveMatchesList = await fetchLiveMatches();
-    const competitions = await fetchBetfairCompetitions('4'); // Sport ID 4 for Cricket
+    const competitions = await fetchBetfairCompetitions('4'); // 4 = Cricket
 
     let syncedCount = 0;
     for (const matchSummary of liveMatchesList) {
-      // Respect API rate limits
+      // Respect trial API rate limits to prevent 429 errors
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Fetch high-fidelity detail for the match (t1/t2 structure)
+      // Fetch high-fidelity detail (score, t1/t2 structure)
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
 
       // Default Odds Schema (Liquidity Placeholder)
@@ -52,13 +52,13 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
 
       let discoveredMarketId = null;
 
-      // 4. Betfair Exchange Discovery Protocol
+      // 4. Betfair Exchange Discovery Protocol (Pulse Chain)
       try {
-        const homeTeam = matchData.teams[0].toLowerCase();
-        const awayTeam = matchData.teams[1].toLowerCase();
+        const homeTeam = (matchData.teams?.[0] || '').toLowerCase();
+        const awayTeam = (matchData.teams?.[1] || '').toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step A: Match competition by series or team name
+        // Find matching competition
         const matchingComp = competitions.find((c: any) => {
           const cName = (c.competition?.name || '').toLowerCase();
           return seriesName.includes(cName) || cName.includes(seriesName) || 
@@ -66,7 +66,6 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         });
 
         if (matchingComp) {
-          // Step B: Discover Event
           const events = await fetchBetfairEvents(matchingComp.competition.id, '4');
           const matchingEvent = events.find((e: any) => {
             const eName = (e.event?.name || '').toLowerCase();
@@ -74,15 +73,14 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           });
 
           if (matchingEvent) {
-            // Step C: Discover Winner Market
             const markets = await fetchBetfairMarkets(matchingEvent.event.id, '4');
             const winnerMarket = markets.find((m: any) => 
-              ['Match Odds', 'Winner', 'Match Betting'].some(term => m.marketName.includes(term))
+              ['Match Odds', 'Winner', 'Match Betting'].some(term => m.marketName?.includes(term))
             );
             
             if (winnerMarket) {
               discoveredMarketId = winnerMarket.marketId;
-              // Step D: Pulse Market Book (POST request)
+              // Pulse Market Book (POST request)
               const book = await fetchMarketBook(discoveredMarketId, '4');
               
               if (book && book.runners && book.runners.length >= 2) {
@@ -101,10 +99,10 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           }
         }
       } catch (betfairErr) {
-        console.warn(`Betfair Pulse interrupted for ${matchData.id}`);
+        console.warn(`Betfair Discovery interrupted for ${matchData.id}`);
       }
 
-      // 5. Persistence Phase: Save to Terminal
+      // 5. Atomic Persistance: Update record in-place to trigger real-time UI refresh
       const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         ...matchData,
@@ -114,7 +112,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         marketId: discoveredMarketId
       }, { merge: true });
 
-      // Market Sub-collection Update
+      // Update Market Sub-collection
       const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
       await setDoc(marketSubRef, {
         id: 'match_winner',
@@ -123,15 +121,15 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         selections: [
           { 
             id: 'home', 
-            name: matchData.teams[0], 
+            name: matchData.teams?.[0] || 'Team A', 
             odds: marketOdds.home.back, 
-            layOdds: marketOdds.home.lay || marketOdds.home.back + 0.02 
+            layOdds: marketOdds.home.lay || (marketOdds.home.back > 1 ? marketOdds.home.back + 0.02 : 0)
           },
           { 
             id: 'away', 
-            name: matchData.teams[1], 
+            name: matchData.teams?.[1] || 'Team B', 
             odds: marketOdds.away.back, 
-            layOdds: marketOdds.away.lay || marketOdds.away.back + 0.02 
+            layOdds: marketOdds.away.lay || (marketOdds.away.back > 1 ? marketOdds.away.back + 0.02 : 0)
           }
         ]
       }, { merge: true });
@@ -141,13 +139,13 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
 
     return { success: true, count: syncedCount, tournamentsCount: seriesList.length };
   } catch (error: any) {
-    console.error("Terminal Sync Error:", error);
+    console.error("Professional Pulse Error:", error);
     return { success: false, error: error.message };
   }
 }
 
 /**
- * Deep Purge: Clears all matches and tournaments from the terminal.
+ * Manual Deep Purge: Force clears the terminal feed.
  */
 export async function clearAllMatchesAction(db: Firestore) {
   try {

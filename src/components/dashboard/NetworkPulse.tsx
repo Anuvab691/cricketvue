@@ -10,8 +10,9 @@ import { cn } from '@/lib/utils';
 
 /**
  * NetworkPulse: Automated background service.
- * Performs a "Fresh Pulse" (auto-purge and sync) every 10 seconds 
- * to ensure scores and Betfair odds are perfectly synchronized.
+ * Performs a seamless professional sync every 10 seconds 
+ * to ensure scores and Betfair odds are updated in real-time
+ * without removing existing matches from the view.
  */
 export function NetworkPulse() {
   const firestore = useFirestore();
@@ -26,20 +27,22 @@ export function NetworkPulse() {
   const { data: userData } = useDoc(userRef);
 
   useEffect(() => {
+    // Only Admin or Super roles trigger the background sync pulse
     if (!firestore || !userData || (userData.role !== 'admin' && userData.role !== 'super')) return;
 
     const performPulse = async () => {
       setIsSyncing(true);
-      // Auto-purge "old scores" and sync fresh professional feed
-      await syncCricketMatchesAction(firestore, { clearFirst: true });
+      // Background professional sync (updates existing records seamlessly)
+      // We removed clearFirst: true to prevent UI flickering/matches vanishing
+      await syncCricketMatchesAction(firestore);
       setLastPulse(new Date().toLocaleTimeString());
       setIsSyncing(false);
     };
 
-    // Initial Pulse
+    // Initial Pulse on load
     performPulse();
 
-    // 10-second high-frequency refresh
+    // 10-second high-frequency refresh interval
     const interval = setInterval(performPulse, 10000);
 
     return () => clearInterval(interval);
@@ -65,10 +68,10 @@ export function NetworkPulse() {
       </div>
       <div className="flex flex-col">
         <span className="text-[9px] font-black uppercase text-white tracking-widest leading-none">
-          {isSyncing ? 'Auto-Purge & Sync...' : 'Network Active'}
+          {isSyncing ? 'Auto-Syncing Network...' : 'Network Active'}
         </span>
         <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">
-          Pulse: {lastPulse}
+          Last Pulse: {lastPulse}
         </span>
       </div>
     </div>
