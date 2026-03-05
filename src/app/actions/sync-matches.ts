@@ -1,6 +1,6 @@
 'use client';
 
-import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { Firestore, doc, setDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { 
   fetchLiveMatches, 
   fetchMatchDetail, 
@@ -36,7 +36,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
 
     for (const matchSummary of liveMatchesList) {
       // Respect API rate limits (Trial Key: ~2 req/sec)
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 600));
       
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
       activeMatchIds.add(matchData.id);
@@ -160,6 +160,23 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
     };
   } catch (error: any) {
     console.error("Professional Sync Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Purges all matches from the terminal.
+ */
+export async function clearAllMatchesAction(db: Firestore) {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'matches'));
+    const batch = writeBatch(db);
+    querySnapshot.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+    return { success: true };
+  } catch (error: any) {
     return { success: false, error: error.message };
   }
 }
