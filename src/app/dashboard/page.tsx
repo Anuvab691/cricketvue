@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useFirestore, useUser, useDoc, useCollection } from '@/firebase';
@@ -18,6 +17,7 @@ import Link from 'next/link';
 import { GamesGrid } from '@/components/dashboard/GamesGrid';
 import { MatchRow } from '@/components/dashboard/MatchRow';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
+import { NetworkPulse } from '@/components/dashboard/NetworkPulse';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -55,11 +55,12 @@ export default function Dashboard() {
         <header className="exchange-header h-12">
           <div className="flex items-center gap-4">
             <Link href="/">
-               <h1 className="text-2xl font-black italic tracking-tighter">ALL</h1>
+               <h1 className="text-2xl font-black italic tracking-tighter">CRICKETVUE</h1>
             </Link>
           </div>
           
           <div className="flex items-center gap-4">
+            <NetworkPulse />
             <SyncDataButton />
             <div className="flex items-center gap-2 text-xs font-bold text-white">
               <span className="opacity-80">Balance:</span>
@@ -98,7 +99,7 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] whitespace-nowrap text-slate-500 font-bold uppercase">
-                Sportbex Terminal: Connected to Global Exchange Feed.
+                Sportbex Terminal: Connected to Global Exchange Feed. High-Frequency Auto-Sync (10s) Active.
               </p>
             </div>
           </div>
@@ -114,7 +115,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="border-x border-slate-200 shadow-sm bg-white">
+          <div className="border-x border-slate-200 shadow-sm bg-white min-h-[400px]">
             {matchesLoading ? (
               <div className="p-20 text-center flex flex-col items-center gap-2">
                 <Loader2 className="animate-spin text-primary" size={32} />

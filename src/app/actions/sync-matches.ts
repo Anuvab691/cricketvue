@@ -14,9 +14,13 @@ import {
 /**
  * Integrated Sync Engine: Synchronizes Matches and Tournaments with a resilient Betfair Discovery Chain.
  */
-export async function syncCricketMatchesAction(db: Firestore) {
+export async function syncCricketMatchesAction(db: Firestore, options: { clearFirst?: boolean } = {}) {
   try {
-    // 1. Sync Series (Tournaments) - Primary Pulse
+    if (options.clearFirst) {
+      await clearAllMatchesAction(db);
+    }
+
+    // 1. Sync Series (Tournaments)
     const seriesList = await fetchLiveSeries();
     for (const series of seriesList) {
       if (!series.id) continue;
@@ -32,13 +36,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     let syncedCount = 0;
     for (const matchSummary of liveMatchesList) {
-      // Trial Key Rate-Limit Protection (1.5s delay ensures stable discovery chain)
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Respect trial API rate limits with a small staggered delay
+      await new Promise(resolve => setTimeout(resolve, 800));
       
       // Fetch high-fidelity detail for the match (t1/t2 structure)
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
 
-      // Default Odds Schema (Standard fallback if market mapping fails)
+      // Default Odds Schema
       let marketOdds = {
         home: { back: 1.00, lay: 0.00 },
         away: { back: 1.00, lay: 0.00 }
@@ -46,43 +50,40 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
       let discoveredMarketId = null;
 
-      // 3. Betfair Exchange Pulse: The Discovery Chain
+      // 3. Betfair Exchange Pulse: Discovery Protocol
       try {
         const homeTeam = matchData.teams[0].toLowerCase();
         const awayTeam = matchData.teams[1].toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step A: Discovery Phase - Find matching competition
+        // Step A: Discovery Phase - Matching competition
         const matchingComp = competitions.find((c: any) => {
           const cName = (c.competition?.name || '').toLowerCase();
           return seriesName.includes(cName) || cName.includes(seriesName) || 
                  homeTeam.includes(cName) || awayTeam.includes(cName);
         });
 
-        // Step B: Event Phase - If competition identified, fetch its events
         if (matchingComp) {
+          // Step B: Event Phase
           const events = await fetchBetfairEvents(matchingComp.competition.id, '4');
           const matchingEvent = events.find((e: any) => {
             const eName = (e.event?.name || '').toLowerCase();
             return eName.includes(homeTeam) || eName.includes(awayTeam);
           });
 
-          // Step C: Market Phase - If event identified, fetch available markets
           if (matchingEvent) {
+            // Step C: Market Phase
             const markets = await fetchBetfairMarkets(matchingEvent.event.id, '4');
-            // Specifically target the "Match Odds" market
             const winnerMarket = markets.find((m: any) => 
               m.marketName === 'Match Odds' || m.marketName === 'Winner' || m.marketName === 'Match Betting'
             );
             
-            // Step D: Book Phase - Fetch real-time prices (Back/Lay)
             if (winnerMarket) {
               discoveredMarketId = winnerMarket.marketId;
+              // Step D: Book Phase (POST request)
               const book = await fetchMarketBook(discoveredMarketId, '4');
               
               if (book && book.runners && book.runners.length >= 2) {
-                // Map runners to home/away based on name matching or order
-                // Runners[0] is typically Selection 1 (Home), Runners[1] is Selection 2 (Away)
                 marketOdds = {
                   home: { 
                     back: book.runners[0]?.ex?.availableToBack?.[0]?.price || 1.00,
@@ -98,7 +99,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
           }
         }
       } catch (betfairErr) {
-        console.warn(`Discovery Chain Pulse interrupted for ${matchData.name}:`, betfairErr);
+        console.warn(`Betfair Discovery interrupted for ${matchData.name}:`, betfairErr);
       }
 
       // 4. Persistence Phase: Save to Match Terminal
@@ -138,7 +139,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     return { success: true, count: syncedCount, tournamentsCount: seriesList.length };
   } catch (error: any) {
-    console.error("Terminal Sync Engine Critical Failure:", error);
+    console.error("Sync Engine Failure:", error);
     return { success: false, error: error.message };
   }
 }

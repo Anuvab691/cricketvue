@@ -99,7 +99,7 @@ export async function fetchBetfairMarkets(eventId: string, sportId: string = '4'
 }
 
 /**
- * Betfair Pulse: Fetches the Market Book (odds/prices) via POST.
+ * Betfair Pulse: Fetches the Market Book (odds/prices) via POST as requested.
  */
 export async function fetchMarketBook(marketId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
@@ -160,6 +160,7 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
+ * Updated to handle the specific teams.t1 and teams.t2 structure provided.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
