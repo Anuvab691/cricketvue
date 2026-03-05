@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview High-Performance Server-Side Service for Sportbex API.
- * Integrated with Betfair Exchange endpoints for live market data.
+ * Integrated with Betfair Exchange endpoints for live market discovery.
  */
 
 export interface ExternalMatch {
@@ -41,7 +41,7 @@ const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
 const API_KEY = process.env.SPORTBEX_API_KEY || 'EXqcenzWl6ZPT7WnM9CwMf1ZWrnw7Cm9tkLXL7tD';
 
 /**
- * Core fetcher utilizing header-based authentication for Sportbex.
+ * Core fetcher for Sportbex API with header-based authentication.
  */
 async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: any) {
   const cleanEndpoint = endpoint.replace(/^\//, '');
@@ -64,19 +64,18 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 
     const response = await fetch(url, options);
     if (!response.ok) {
-      console.warn(`Sportbex Response Not OK [${endpoint}]: ${response.status}`);
       return null;
     }
 
     return await response.json();
   } catch (error: any) {
-    console.error(`Sportbex Network Error [${endpoint}]:`, error.message);
+    console.error(`Sportbex Error [${endpoint}]:`, error.message);
     return null;
   }
 }
 
 /**
- * Betfair Discovery Phase 1: Fetches active Cricket competitions (Sport ID: 4).
+ * Betfair Discovery Phase 1: Fetches active competitions for a sport.
  */
 export async function fetchBetfairCompetitions(sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/${sportId}`);
@@ -92,7 +91,7 @@ export async function fetchBetfairEvents(competitionId: string, sportId: string 
 }
 
 /**
- * Betfair Discovery Phase 3: Fetches markets for a specific event.
+ * Betfair Discovery Phase 3: Fetches available markets for an event.
  */
 export async function fetchBetfairMarkets(eventId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/markets/${sportId}/${eventId}`);
@@ -100,8 +99,7 @@ export async function fetchBetfairMarkets(eventId: string, sportId: string = '4'
 }
 
 /**
- * Betfair Final Pulse: Fetches the market book (prices) for specific market IDs.
- * Uses POST as per specification.
+ * Betfair Pulse: Fetches the Market Book (odds/prices) via POST.
  */
 export async function fetchMarketBook(marketId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
@@ -111,7 +109,7 @@ export async function fetchMarketBook(marketId: string, sportId: string = '4') {
 }
 
 /**
- * Fetches high-level list of all live matches from the network pulse.
+ * Fetches all live matches currently active on the network.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
@@ -121,13 +119,12 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     const matchesArray = Array.isArray(json.data) ? json.data : (json.data.matches || []);
     return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
-    console.error("Fetch Live Matches Error:", e);
     return [];
   }
 }
 
 /**
- * Fetches deep-dive match data for a specific match ID.
+ * Fetches deep detail for a specific match ID.
  */
 export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch | null> {
   try {
@@ -135,13 +132,12 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
     if (!json || !json.data) return null;
     return transformSportbexLiveMatch(json.data, matchId);
   } catch (e) {
-    console.error(`Fetch Match Detail Error [${matchId}]:`, e);
     return null;
   }
 }
 
 /**
- * Fetches live series (tournaments) from the network.
+ * Fetches live series (tournaments) for the specified year.
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
@@ -158,14 +154,12 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
       resultText: s.status_text || s.result?.message || null
     }));
   } catch (e) {
-    console.error("Fetch Live Series Error:", e);
     return [];
   }
 }
 
 /**
- * Transforms Sportbex Live Match schema into Terminal Match schema.
- * Precision mapping for t1/t2 structure.
+ * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -186,7 +180,7 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = status === 'COMPLETED' || status === 'finished';
   const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play';
 
-  // Sanitize IDs: Replace spaces with hyphens for clean URLs and Firestore compatibility
+  // Sanitize IDs: Decode then replace spaces for clean Firestore keys
   let finalId = originalId || match.id?.toString() || Math.random().toString(36).substr(2, 9);
   finalId = decodeURIComponent(finalId).replace(/\s+/g, '-');
 

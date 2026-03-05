@@ -2,18 +2,18 @@
 
 import Link from 'next/link';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
-import { PlayCircle, Monitor, Smartphone, Clock } from 'lucide-react';
+import { PlayCircle, Monitor, Smartphone, Clock, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
   
-  // Use professional odds from the enriched Betfair sync
-  const homeBack = match.odds?.home?.back || 1.90;
-  const homeLay = match.odds?.home?.lay || 1.92;
-  const awayBack = match.odds?.away?.back || 1.90;
-  const awayLay = match.odds?.away?.lay || 1.92;
+  // Extract professional odds from the record
+  const homeBack = match.odds?.home?.back || 1.00;
+  const homeLay = match.odds?.home?.lay || 0.00;
+  const awayBack = match.odds?.away?.back || 1.00;
+  const awayLay = match.odds?.away?.lay || 0.00;
 
   const [lastUpdateText, setLastUpdateText] = useState('');
 
@@ -29,68 +29,60 @@ export function MatchRow({ match }: { match: any }) {
   const matchId = match.id ? encodeURIComponent(match.id) : '';
 
   return (
-    <div className="match-row group">
-      <div className="flex-1 flex flex-col gap-0.5">
+    <div className="match-row group h-auto min-h-[64px] py-3">
+      <div className="flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <Link href={`/match/${matchId}`} className="font-bold text-slate-800 hover:text-primary transition-colors cursor-pointer">
+          <Link href={`/match/${matchId}`} className="font-black uppercase italic tracking-tighter text-slate-800 hover:text-primary transition-all text-sm">
             {match.teams?.[0] || 'TBA'} v {match.teams?.[1] || 'TBA'}
           </Link>
-          <span className="text-[10px] text-slate-400">/ {format(matchDate, 'dd/MM/yyyy HH:mm')}</span>
+          <span className="text-[10px] text-slate-400 font-bold">/ {format(matchDate, 'dd/MM HH:mm')}</span>
           {isLive && (
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <div className="flex items-center gap-1 bg-green-500/10 px-1.5 py-0.5 rounded">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-[9px] font-black text-green-600 uppercase">Live</span>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-3 text-slate-400">
           <div className="flex gap-1.5 items-center">
-             <Monitor size={12} className="opacity-50" />
-             <Smartphone size={12} className="opacity-50" />
-             <PlayCircle size={12} className="text-green-500" />
-             <span className="text-[10px] font-bold text-slate-500">BM</span>
+             <Monitor size={12} className="opacity-30" />
+             <Smartphone size={12} className="opacity-30" />
+             <PlayCircle size={12} className="text-primary" />
+             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sportbex Pulse</span>
           </div>
           {match.currentScore && (
-            <span className="text-[10px] font-mono text-primary font-bold">
+            <span className="text-[10px] font-mono text-primary font-black bg-primary/5 px-2 py-0.5 rounded-sm">
               {match.currentScore}
             </span>
           )}
           {match.lastUpdated && (
             <div className="flex items-center gap-1 text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
-              <Clock size={10} /> {lastUpdateText || 'Updated'}
+              <Clock size={10} /> {lastUpdateText}
             </div>
           )}
         </div>
       </div>
 
-      <div className="w-[180px] flex justify-around">
-        {/* Home Team Betfair Pulse */}
-        <Link href={`/match/${matchId}`} className="flex gap-0.5">
-          <div className="odds-box odds-blue">
-            <span>{homeBack.toFixed(2)}</span>
-            <span className="text-[8px] opacity-70">0</span>
+      <div className="w-[180px] flex justify-around items-center">
+        {/* Home Team Prices */}
+        <Link href={`/match/${matchId}`} className="flex gap-0.5 group/odds">
+          <div className="odds-box odds-blue w-[38px] h-[34px]">
+            <span className="text-xs">{homeBack > 1 ? homeBack.toFixed(2) : '-'}</span>
           </div>
-          <div className="odds-box odds-pink">
-            <span>{homeLay.toFixed(2)}</span>
-            <span className="text-[8px] opacity-70">0</span>
+          <div className="odds-box odds-pink w-[38px] h-[34px]">
+            <span className="text-xs">{homeLay > 0 ? homeLay.toFixed(2) : '-'}</span>
           </div>
         </Link>
         
-        <div className="flex gap-0.5 opacity-30 hidden md:flex">
-          <div className="odds-box bg-slate-100">
-            <span>-</span>
-          </div>
-          <div className="odds-box bg-slate-100">
-            <span>-</span>
-          </div>
-        </div>
+        <div className="w-px h-6 bg-slate-100 hidden md:block" />
 
-        {/* Away Team Betfair Pulse */}
-        <Link href={`/match/${matchId}`} className="flex gap-0.5">
-          <div className="odds-box odds-blue">
-            <span>{awayBack.toFixed(2)}</span>
-            <span className="text-[8px] opacity-70">0</span>
+        {/* Away Team Prices */}
+        <Link href={`/match/${matchId}`} className="flex gap-0.5 group/odds">
+          <div className="odds-box odds-blue w-[38px] h-[34px]">
+            <span className="text-xs">{awayBack > 1 ? awayBack.toFixed(2) : '-'}</span>
           </div>
-          <div className="odds-box odds-pink">
-            <span>( {awayLay.toFixed(2)} )</span>
-            <span className="text-[8px] opacity-70">0</span>
+          <div className="odds-box odds-pink w-[38px] h-[34px]">
+            <span className="text-xs">{awayLay > 0 ? awayLay.toFixed(2) : '-'}</span>
           </div>
         </Link>
       </div>
