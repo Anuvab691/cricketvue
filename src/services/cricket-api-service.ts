@@ -65,7 +65,6 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
       }
     };
 
-    // Body only allowed for POST/PUT/PATCH in standard fetch
     if (body && method === 'POST') {
       options.body = JSON.stringify(body);
     }
@@ -118,6 +117,16 @@ export async function fetchMarketOdds(marketIds: string[], sportId: string = '4'
 export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
   if (!eventId) return null;
   const json = await fetchFromSportbex(`betfair/fancy-bookmaker-odds/${sportId}/${eventId}`);
+  return json?.data || null;
+}
+
+/**
+ * Premium Fancy Pulse: Fetches live Premium Fancy markets for a specific event.
+ * Uses the GET /betfair/getPremium/{sportId}/{eventId} endpoint.
+ */
+export async function fetchPremiumFancy(eventId: string, sportId: string = '4') {
+  if (!eventId) return null;
+  const json = await fetchFromSportbex(`betfair/getPremium/${sportId}/${eventId}`);
   return json?.data || null;
 }
 
@@ -177,7 +186,6 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
   
-  // Robust Team Name Extraction - Checking all possible fields
   let homeName = match.t1_name || match.home_team_name || 'TBA';
   let awayName = match.t2_name || match.away_team_name || 'TBA';
 
@@ -191,10 +199,6 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     } else if (match.teamA && match.teamB) {
       homeName = match.teamA;
       awayName = match.teamB;
-    } else if (match.name && match.name.includes(' v ')) {
-      const parts = match.name.split(' v ');
-      homeName = parts[0];
-      awayName = parts[1];
     }
   }
   
@@ -210,15 +214,12 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     scoreText = match.score;
   } else if (match.current_score) {
     scoreText = match.current_score;
-  } else if (match.scoreText) {
-    scoreText = match.scoreText;
   }
 
   const statusRaw = (match.status || '').toUpperCase();
   const isCompleted = statusRaw === 'COMPLETED' || statusRaw === 'FINISHED' || statusRaw === 'RESULT';
   const isLive = match.isLive === true || statusRaw === 'LIVE' || statusRaw === 'IN PLAY' || !!t1.score || !!match.current_score;
 
-  // Stable ID Generation (Sanitized for URLs and consistent document updates)
   let finalId = originalId || match.id?.toString() || `${homeName}-${awayName}`;
   finalId = finalId.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toUpperCase();
 

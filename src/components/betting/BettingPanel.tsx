@@ -50,14 +50,13 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
 
   const stakeNum = parseFloat(stake) || 0;
 
-  // Market Grouping
   const matchWinnerMarket = match.markets?.find((m: any) => m.type === 'match_winner');
   const bookmakerMarket = match.markets?.find((m: any) => m.type === 'bookmaker');
   const fancyMarket = match.markets?.find((m: any) => m.type === 'fancy');
+  const premiumFancyMarket = match.markets?.find((m: any) => m.type === 'premium_fancy');
 
   return (
     <div className="space-y-4">
-      {/* Stake Quick Entry */}
       <div className="bg-[#2c3e50] p-3 rounded-sm border border-white/5 flex flex-wrap items-center gap-3">
         <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">Entry Stake:</span>
         <Input 
@@ -83,7 +82,6 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
       </div>
 
       <div className="space-y-4">
-        {/* Match Odds Market */}
         <div className="bg-white border border-slate-200 rounded-sm shadow-sm">
           <div className="market-header">
             <span>MATCH_ODDS</span>
@@ -114,32 +112,24 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
                   </div>
 
                   <div className="grid grid-cols-6 w-[288px] h-full items-center">
-                    {/* Back Grid */}
                     <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds - 0.02, false)}>
                       <span>{(backOdds - 0.02).toFixed(2)}</span>
-                      <span className="text-[8px] opacity-40">10k</span>
                     </div>
                     <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds - 0.01, false)}>
                       <span>{(backOdds - 0.01).toFixed(2)}</span>
-                      <span className="text-[8px] opacity-40">50k</span>
                     </div>
                     <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backOdds, false)}>
                       <span className="text-xs">{backOdds.toFixed(2)}</span>
-                      <span className="text-[8px] opacity-40">1.2L</span>
                     </div>
 
-                    {/* Lay Grid */}
                     <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds, true)}>
                       <span className="text-xs">{layOdds.toFixed(2)}</span>
-                      <span className="text-[8px] opacity-40">45k</span>
                     </div>
                     <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds + 0.01, true)}>
                       <span>{(layOdds + 0.01).toFixed(2)}</span>
-                      <span className="text-[8px] opacity-40">25k</span>
                     </div>
                     <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layOdds + 0.02, true)}>
                       <span>{(layOdds + 0.02).toFixed(2)}</span>
-                      <span className="text-[8px] opacity-40">15k</span>
                     </div>
                   </div>
                 </div>
@@ -148,7 +138,6 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
           </div>
         </div>
 
-        {/* Bookmaker Market Section */}
         <div className="bg-white border border-slate-200 rounded-sm shadow-sm">
           <div className="market-header bg-[#34495e]">
             <span>Bookmaker</span>
@@ -174,20 +163,19 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
              </div>
           ) : (
             <div className="p-4 text-center text-slate-300 text-[10px] font-bold italic">
-              Bookmaker market suspended - No active liquidity found.
+              Bookmaker market suspended.
             </div>
           )}
         </div>
 
-        {/* Fancy Markets Section */}
         <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
           <div className="market-header bg-[#16a085]">
             <span>Normal (Fancy)</span>
-            <Badge variant="outline" className="text-[9px] border-white/20 text-white h-4 font-black">ACTIVE</Badge>
+            <Badge variant="outline" className="text-[9px] border-white/20 text-white h-4 font-black">LIVE</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-100">
             {fancyMarket ? fancyMarket.selections.map((fancy: any, idx: number) => (
-              <div key={idx} className="bg-white p-3 flex justify-between items-center group h-auto min-h-[48px]">
+              <div key={idx} className="bg-white p-3 flex justify-between items-center h-auto min-h-[48px]">
                 <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight max-w-[140px] leading-tight">{fancy.name}</span>
                 <div className="flex gap-1">
                    <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center hover:bg-pink-200">
@@ -202,8 +190,36 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
               </div>
             )) : (
               <div className="bg-white p-8 text-center w-full col-span-2">
-                 <Loader2 className="animate-spin mx-auto text-slate-200 mb-2" size={24} />
-                 <p className="text-[10px] text-slate-300 font-bold uppercase italic">Syncing live fancy markets...</p>
+                 <p className="text-[10px] text-slate-300 font-bold uppercase italic">No Fancy Markets Active</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Premium Fancy Section */}
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+          <div className="market-header bg-[#e67e22]">
+            <span>Premium Fancy</span>
+            <Badge variant="outline" className="text-[9px] border-white/20 text-white h-4 font-black">HIGH LIQUIDITY</Badge>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-100">
+            {premiumFancyMarket ? premiumFancyMarket.selections.map((premium: any, idx: number) => (
+              <div key={idx} className="bg-white p-3 flex justify-between items-center h-auto min-h-[48px]">
+                <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight max-w-[140px] leading-tight">{premium.name}</span>
+                <div className="flex gap-1">
+                   <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center hover:bg-pink-200">
+                     <span className="text-xs font-black">{premium.no || 0}</span>
+                     <span className="text-[8px] font-bold">No</span>
+                   </button>
+                   <button className="w-12 h-9 bg-blue-100 border border-blue-200 text-blue-700 rounded-sm flex flex-col items-center justify-center hover:bg-blue-200">
+                     <span className="text-xs font-black">{premium.yes || 0}</span>
+                     <span className="text-[8px] font-bold">Yes</span>
+                   </button>
+                </div>
+              </div>
+            )) : (
+              <div className="bg-white p-8 text-center w-full col-span-2">
+                 <p className="text-[10px] text-slate-300 font-bold uppercase italic">Premium markets currently suspended.</p>
               </div>
             )}
           </div>

@@ -8,7 +8,8 @@ import {
   fetchBetfairCompetitions,
   fetchBetfairEvents,
   fetchMarketOdds,
-  fetchFancyOdds
+  fetchFancyOdds,
+  fetchPremiumFancy
 } from '@/services/cricket-api-service';
 
 /**
@@ -31,35 +32,29 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const liveMatchesList = await fetchLiveMatches();
     const activeMatchIds = new Set<string>();
 
-    // Discovery Cache: Fetch all competitions once (Sport ID 4 = Cricket)
     const competitions = await fetchBetfairCompetitions('4'); 
 
-    // To perform a batch odds fetch, we'll collect all discovered marketIds
     const matchToMarketMap = new Map<string, string>();
     const runnerMetadataMap = new Map<string, any[]>();
     const matchToEventMap = new Map<string, string>();
 
     for (const matchSummary of liveMatchesList) {
-      // Respect trial API rate limits with a small delay
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
       activeMatchIds.add(matchData.id);
 
-      // Discovery Phase: Competition -> Event -> MarketId
       try {
         const homeTeam = (matchData.teamA || '').toLowerCase();
         const awayTeam = (matchData.teamB || '').toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step 1: Find matching competition
         const matchingComp = competitions.find((c: any) => {
           const name = (c.competition?.name || '').toLowerCase();
           return seriesName.includes(name) || name.includes(seriesName);
         });
 
         if (matchingComp) {
-          // Step 2: Fetch Events (This endpoint returns events with their marketIds)
           const events = await fetchBetfairEvents(matchingComp.competition.id, '4');
           const matchingEvent = events.find((e: any) => {
             const name = (e.event?.name || '').toLowerCase();
@@ -70,7 +65,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
             matchToEventMap.set(matchData.id, matchingEvent.event.id);
             
             if (matchingEvent.markets) {
-              // Step 3: Extract marketId for "Match Odds"
               const winnerMarket = matchingEvent.markets.find((m: any) => 
                 ['Match Odds', 'Winner', 'Match Betting', 'Winner 2025'].some(term => 
                   (m.marketName || '').toLowerCase().includes(term.toLowerCase())
@@ -79,7 +73,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
               
               if (winnerMarket) {
                 matchToMarketMap.set(matchData.id, winnerMarket.marketId);
-                // Store runner names for precise price mapping later
                 runnerMetadataMap.set(winnerMarket.marketId, winnerMarket.runners || []);
               }
             }
@@ -89,7 +82,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
         console.error("Discovery error for match:", matchData.id, err);
       }
 
-      // Initial match update (with current scores)
       const matchRef = doc(db, 'matches', matchData.id);
       setDoc(matchRef, {
         ...matchData,
@@ -112,7 +104,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
             const homeTeam = (matchData?.teamA || '').toLowerCase();
             const awayTeam = (matchData?.teamB || '').toLowerCase();
 
-            // Precision Match: Link Betfair runners to Team A / Team B by name
             const homeRunner = marketBook.runners.find((r: any) => {
               const meta = runnersMeta.find(m => m.selectionId === r.selectionId);
               return (meta?.runnerName || '').toLowerCase().includes(homeTeam);
@@ -134,7 +125,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
               }
             };
 
-            // Update Match with professional odds
             const matchRef = doc(db, 'matches', matchId);
             setDoc(matchRef, {
               odds: marketOdds,
@@ -142,7 +132,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
               lastUpdated: new Date().toISOString()
             }, { merge: true });
 
-            // Update Market Sub-collection for betting UI
             const marketSubRef = doc(db, 'matches', matchId, 'markets', 'match_winner');
             setDoc(marketSubRef, {
               id: 'match_winner',
@@ -168,12 +157,11 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }
     }
 
-    // 4. NEW Phase: Fetch Fancy and Bookmaker Odds (GET)
+    // 4. Fancy, Bookmaker and Premium Odds (GET)
     for (const [matchId, eventId] of matchToEventMap.entries()) {
       try {
         const fancyData = await fetchFancyOdds(eventId, '4');
-        if (fancyData && (fancyData.fancy || fancyData.bookmaker)) {
-          // Store Bookmaker Odds
+        if (fancyData) {
           if (fancyData.bookmaker && fancyData.bookmaker.length > 0) {
             const bookmakerMarketRef = doc(db, 'matches', matchId, 'markets', 'bookmaker');
             setDoc(bookmakerMarketRef, {
@@ -189,7 +177,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
             }, { merge: true });
           }
 
-          // Store Fancy Odds
           if (fancyData.fancy && fancyData.fancy.length > 0) {
             const fancyMarketRef = doc(db, 'matches', matchId, 'markets', 'fancy');
             setDoc(fancyMarketRef, {
@@ -206,12 +193,29 @@ export async function syncCricketMatchesAction(db: Firestore) {
             }, { merge: true });
           }
         }
+
+        // Premium Fancy Pulse
+        const premiumFancy = await fetchPremiumFancy(eventId, '4');
+        if (premiumFancy && Array.isArray(premiumFancy) && premiumFancy.length > 0) {
+          const premiumRef = doc(db, 'matches', matchId, 'markets', 'premium_fancy');
+          setDoc(premiumRef, {
+            id: 'premium_fancy',
+            type: 'premium_fancy',
+            status: 'open',
+            selections: premiumFancy.map((p: any) => ({
+              id: p.selectionId?.toString() || p.runnerName,
+              name: p.runnerName,
+              no: p.layPrice || 0,
+              yes: p.backPrice || 0,
+              status: p.gameStatus || 'active'
+            }))
+          }, { merge: true });
+        }
       } catch (err) {
-        console.error("Fancy odds fetch error for match:", matchId, err);
+        console.error("Professional micro-market fetch error for match:", matchId, err);
       }
     }
 
-    // 5. Cleanup Stale Matches (Keep only what's currently in the feed - "No more, no less")
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
