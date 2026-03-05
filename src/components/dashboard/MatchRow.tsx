@@ -9,12 +9,17 @@ export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
   
+  const marketStatus = match.odds?.status || 'OPEN';
+  const isSuspended = marketStatus !== 'OPEN';
+
   // Professional Odds Mapping
-  // Ensure we display '-' if the data is 1.00/0.00 (default fallback)
   const homeBack = match.odds?.home?.back;
   const homeLay = match.odds?.home?.lay;
+  const homeLast = match.odds?.home?.lastPrice;
+  
   const awayBack = match.odds?.away?.back;
   const awayLay = match.odds?.away?.lay;
+  const awayLast = match.odds?.away?.lastPrice;
 
   const [lastUpdateText, setLastUpdateText] = useState('');
 
@@ -34,8 +39,11 @@ export function MatchRow({ match }: { match: any }) {
 
   const matchId = match.id || '';
 
-  const formatPrice = (p: any) => {
-    if (!p || p === 1 || p === 0) return '-';
+  const formatPrice = (p: any, lastPrice?: number) => {
+    if (isSuspended) return 'SUSP';
+    if (!p || p === 1 || p === 0) {
+      return lastPrice ? lastPrice.toFixed(2) : '-';
+    }
     return p.toFixed(2);
   };
 
@@ -82,10 +90,10 @@ export function MatchRow({ match }: { match: any }) {
       <div className="w-[180px] flex justify-around items-center shrink-0">
         <div className="flex gap-0.5">
           <div className="odds-box odds-blue w-[42px] h-[40px]">
-            <span className="text-xs font-black">{formatPrice(homeBack)}</span>
+            <span className="text-[10px] font-black">{formatPrice(homeBack, homeLast)}</span>
           </div>
           <div className="odds-box odds-pink w-[42px] h-[40px]">
-            <span className="text-xs font-black">{formatPrice(homeLay)}</span>
+            <span className="text-[10px] font-black">{formatPrice(homeLay)}</span>
           </div>
         </div>
         
@@ -93,10 +101,10 @@ export function MatchRow({ match }: { match: any }) {
 
         <div className="flex gap-0.5">
           <div className="odds-box odds-blue w-[42px] h-[40px]">
-            <span className="text-xs font-black">{formatPrice(awayBack)}</span>
+            <span className="text-[10px] font-black">{formatPrice(awayBack, awayLast)}</span>
           </div>
           <div className="odds-box odds-pink w-[42px] h-[40px]">
-            <span className="text-xs font-black">{formatPrice(awayLay)}</span>
+            <span className="text-[10px] font-black">{formatPrice(awayLay)}</span>
           </div>
         </div>
       </div>

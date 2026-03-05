@@ -57,13 +57,15 @@ export async function syncCricketMatchesAction(db: Firestore) {
         });
 
         if (matchedMatch) {
-          // SELECT MARKET: Look for "Match Odds" case-insensitive
+          // SELECT MARKET: Strengthened selection logic
+          const targetMarketNames = ['match odds', 'match winner', 'winner'];
           let market = betfairEvent.markets?.find((m: any) => 
-            (m.marketName || '').toLowerCase().includes("match odds")
+            targetMarketNames.some(name => (m.marketName || '').toLowerCase().includes(name))
           );
 
-          // Fallback to first market if not found
-          if (!market && betfairEvent.markets?.[0]) {
+          if (!market && betfairEvent.markets?.length > 0) {
+            console.log(`Preferred market not found for ${e.name}. Markets available:`, 
+              betfairEvent.markets.map((m: any) => m.marketName).join(', '));
             market = betfairEvent.markets[0];
           }
 
@@ -96,13 +98,16 @@ export async function syncCricketMatchesAction(db: Firestore) {
           const runner2 = marketBook.runners[1];
 
           professionalOdds = {
+            status: marketBook.status,
             home: { 
               back: runner1.back?.[0]?.price || 1.00,
-              lay: runner1.lay?.[0]?.price || 0.00
+              lay: runner1.lay?.[0]?.price || 0.00,
+              lastPrice: runner1.lastPriceTraded
             },
             away: { 
               back: runner2.back?.[0]?.price || 1.00,
-              lay: runner2.lay?.[0]?.price || 0.00
+              lay: runner2.lay?.[0]?.price || 0.00,
+              lastPrice: runner2.lastPriceTraded
             }
           };
 
@@ -111,12 +116,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
           setDoc(marketSubRef, {
             id: 'match_winner',
             type: 'match_winner',
-            status: 'open',
+            status: marketBook.status,
             selections: marketBook.runners.map((r, idx) => ({
               id: r.selectionId.toString(),
               name: idx === 0 ? matchData.teamA : (idx === 1 ? matchData.teamB : r.runnerName || 'Draw'),
               odds: r.back?.[0]?.price || 1.00,
               layOdds: r.lay?.[0]?.price || 0.00,
+              lastPrice: r.lastPriceTraded,
               backLiquidity: r.back || [],
               layLiquidity: r.lay || []
             }))

@@ -26,8 +26,9 @@ export interface ExternalMatch {
   marketId?: string;
   betfairEventId?: string; // Professional Mapping ID
   odds?: {
-    home: { back: number; lay: number };
-    away: { back: number; lay: number };
+    status?: string;
+    home: { back: number; lay: number; lastPrice?: number };
+    away: { back: number; lay: number; lastPrice?: number };
   };
   lastUpdated?: string;
 }
@@ -52,7 +53,7 @@ export interface NormalizedMarketBook {
     runnerName?: string;
     back: { price: number; size: number }[];
     lay: { price: number; size: number }[];
-    lastPriceTraded: number;
+    lastPriceTraded: number | null;
   }[];
 }
 
@@ -115,12 +116,20 @@ export async function fetchMarketOdds(marketId: string): Promise<NormalizedMarke
     }
 
     const json = await res.json();
-    const data = json.data?.[0];
+    console.log("Sportbex raw status:", json.status);
 
+    const data = json.data?.[0];
     if (!data) return null;
 
-    // Server-side verification log
-    console.log("marketBook sample:", JSON.stringify(data.runners?.[0], null, 2));
+    console.log(`Market Pulse [${marketId}]:`, {
+      status: data.status,
+      inplay: data.inplay,
+      totalMatched: data.totalMatched
+    });
+
+    if (data.runners?.[0]) {
+      console.log("marketBook sample runner.ex:", JSON.stringify(data.runners[0].ex, null, 2));
+    }
 
     // Professional Normalization Transformer
     const normalized: NormalizedMarketBook = {
@@ -131,7 +140,7 @@ export async function fetchMarketOdds(marketId: string): Promise<NormalizedMarke
       runners: (data.runners || []).map((runner: any) => ({
         selectionId: runner.selectionId,
         runnerName: runner.runnerName,
-        lastPriceTraded: runner.lastPriceTraded || 0,
+        lastPriceTraded: runner.lastPriceTraded ?? null,
         back: (runner.ex?.availableToBack || []).slice(0, 3).map((b: any) => ({
           price: b.price || 0,
           size: b.size || 0

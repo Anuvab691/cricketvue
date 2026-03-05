@@ -19,7 +19,7 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
       return;
     }
 
-    if (!odds || odds === 0) return;
+    if (!odds || odds === 0 || odds === 1) return;
 
     setLoading(true);
     const stakeVal = parseFloat(stake);
@@ -59,8 +59,13 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
     ? premiumFancyOverride 
     : (premiumFancyMarket?.selections || []);
 
-  const formatPrice = (p: any) => {
-    if (!p || p === 0 || p === 1) return '-';
+  const isSuspended = (marketStatus: string) => marketStatus && marketStatus !== 'OPEN';
+
+  const formatPrice = (p: any, status: string, lastPrice?: number) => {
+    if (isSuspended(status)) return 'SUSP';
+    if (!p || p === 0 || p === 1) {
+      return lastPrice ? lastPrice.toFixed(2) : '-';
+    }
     return p.toFixed(2);
   };
 
@@ -112,6 +117,7 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
             {matchWinnerMarket?.selections.map((selection: any) => {
               const backLiquidity = selection.backLiquidity || [];
               const layLiquidity = selection.layLiquidity || [];
+              const mStatus = matchWinnerMarket.status || 'OPEN';
               
               return (
                 <div key={selection.id} className="flex items-center justify-between h-14 hover:bg-slate-50 transition-colors">
@@ -123,24 +129,24 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
                   <div className="grid grid-cols-6 w-[288px] h-full items-center">
                     {/* Multi-Level Back Prices */}
                     <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[2]?.price)}>
-                      <span>{formatPrice(backLiquidity[2]?.price)}</span>
+                      <span>{formatPrice(backLiquidity[2]?.price, mStatus)}</span>
                     </div>
                     <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[1]?.price)}>
-                      <span>{formatPrice(backLiquidity[1]?.price)}</span>
+                      <span>{formatPrice(backLiquidity[1]?.price, mStatus)}</span>
                     </div>
                     <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[0]?.price)}>
-                      <span className="text-xs">{formatPrice(backLiquidity[0]?.price)}</span>
+                      <span className="text-xs">{formatPrice(backLiquidity[0]?.price, mStatus, selection.lastPrice)}</span>
                     </div>
 
                     {/* Multi-Level Lay Prices */}
                     <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[0]?.price, true)}>
-                      <span className="text-xs">{formatPrice(layLiquidity[0]?.price)}</span>
+                      <span className="text-xs">{formatPrice(layLiquidity[0]?.price, mStatus)}</span>
                     </div>
                     <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[1]?.price, true)}>
-                      <span>{formatPrice(layLiquidity[1]?.price)}</span>
+                      <span>{formatPrice(layLiquidity[1]?.price, mStatus)}</span>
                     </div>
                     <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[2]?.price, true)}>
-                      <span>{formatPrice(layLiquidity[2]?.price)}</span>
+                      <span>{formatPrice(layLiquidity[2]?.price, mStatus)}</span>
                     </div>
                   </div>
                 </div>
@@ -149,7 +155,6 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
           </div>
         </div>
 
-        {/* Bookmaker, Fancy, and Premium Fancy sections follow same pattern... */}
         <div className="bg-white border border-slate-200 rounded-sm shadow-sm">
           <div className="market-header bg-[#34495e]">
             <span>Bookmaker</span>
@@ -164,10 +169,10 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
                     </div>
                     <div className="flex">
                       <div className="odds-grid-box odds-back w-24 border-r border-slate-200" onClick={() => handlePlaceBet(bookmakerMarket, selection, selection.odds, false)}>
-                        <span className="text-xs">{formatPrice(selection.odds)}</span>
+                        <span className="text-xs">{formatPrice(selection.odds, bookmakerMarket.status)}</span>
                       </div>
                       <div className="odds-grid-box odds-lay w-24" onClick={() => handlePlaceBet(bookmakerMarket, selection, selection.layOdds, true)}>
-                        <span className="text-xs">{formatPrice(selection.layOdds)}</span>
+                        <span className="text-xs">{formatPrice(selection.layOdds, bookmakerMarket.status)}</span>
                       </div>
                     </div>
                  </div>
@@ -191,11 +196,11 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
                 <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight max-w-[140px] leading-tight">{fancy.name}</span>
                 <div className="flex gap-1">
                    <button className="w-12 h-9 bg-pink-100 border border-pink-200 text-pink-700 rounded-sm flex flex-col items-center justify-center hover:bg-pink-200">
-                     <span className="text-xs font-black">{fancy.no || 0}</span>
+                     <span className="text-xs font-black">{isSuspended(fancyMarket.status) ? 'SUSP' : (fancy.no || 0)}</span>
                      <span className="text-[8px] font-bold">No</span>
                    </button>
                    <button className="w-12 h-9 bg-blue-100 border border-blue-200 text-blue-700 rounded-sm flex flex-col items-center justify-center hover:bg-blue-200">
-                     <span className="text-xs font-black">{fancy.yes || 0}</span>
+                     <span className="text-xs font-black">{isSuspended(fancyMarket.status) ? 'SUSP' : (fancy.yes || 0)}</span>
                      <span className="text-[8px] font-bold">Yes</span>
                    </button>
                 </div>
