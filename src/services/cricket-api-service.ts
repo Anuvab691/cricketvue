@@ -28,6 +28,7 @@ export interface ExternalSeries {
   gender: string;
   type: string;
   status: string;
+  resultText?: string;
 }
 
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
@@ -92,7 +93,6 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
     const json = await fetchFromSportbex(`live-score/match/${matchId}`);
     if (!json || !json.data) return null;
 
-    // Use the ID provided in the call to ensure the returned object maintains consistency
     return transformSportbexLiveMatch(json.data, matchId);
   } catch (e) {
     console.error(`Sportbex Detail Fetch Failed for ${matchId}:`, e);
@@ -105,7 +105,6 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
  */
 export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
   try {
-    // Specifically requested URL for series synchronization
     const json = await fetchFromSportbex(`live-score/series?page=1&perPage=10&year=2026`);
     if (!json || !json.data || !json.data.series) return [];
 
@@ -115,7 +114,8 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
       category: s.category || 'International',
       gender: s.gender || 'Men',
       type: s.type || 'Series',
-      status: s.status || 'Active'
+      status: s.status || 'Active',
+      resultText: s.status_text || s.result?.message || null
     }));
   } catch (e) {
     console.error("Sportbex Live Series Fetch Failed:", e);
@@ -125,8 +125,6 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transforms Sportbex Live Match schema into Terminal Match schema.
- * @param match The raw API response object.
- * @param originalId Optional ID to override the calculated ID (useful for detail fetches).
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -148,11 +146,7 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = match.status === 'COMPLETED' || match.status === 'finished';
   const isLive = match.isLive === true || match.status === 'LIVE' || match.status === 'In Play';
 
-  // ID Resolution: Prefer originalId, then explicit ID fields.
-  // We sanitize IDs to replace spaces with hyphens to avoid URL encoding issues.
-  let finalId = originalId || 
-                 match.id?.toString() || 
-                 match.matchId?.toString();
+  let finalId = originalId || match.id?.toString() || match.matchId?.toString();
 
   if (!finalId && match.seriesId && match.name) {
     const safeName = match.name.toString().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
@@ -162,7 +156,6 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   if (!finalId) {
     finalId = Math.random().toString(36).substr(2, 9);
   } else {
-    // Sanitize any spaces in IDs to prevent %20 mismatch
     finalId = finalId.replace(/\s+/g, '-');
   }
 

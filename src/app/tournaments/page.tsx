@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, doc, orderBy } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { Loader2, Star, UserCircle, Globe, Trophy, ArrowRight, RefreshCw } from 'lucide-react';
+import { Loader2, Star, UserCircle, Globe, Trophy, ArrowRight, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
@@ -119,14 +118,28 @@ export default function TournamentsPage() {
                       <Trophy size={80} />
                     </div>
                     <div className="flex justify-between items-start mb-4">
-                      <Badge variant="outline" className="text-[9px] border-primary/20 text-primary uppercase font-black">{t.category}</Badge>
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="text-[9px] border-primary/20 text-primary uppercase font-black">{t.category}</Badge>
+                        {t.status === 'COMPLETED' && (
+                          <Badge className="text-[9px] bg-green-500 text-white uppercase font-black border-none">Finished</Badge>
+                        )}
+                      </div>
                       <Star size={16} className="text-yellow-400 fill-yellow-400" />
                     </div>
                     <h3 className="text-xl font-black italic tracking-tighter uppercase text-slate-800 mb-1 leading-tight">{t.name}</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">{t.gender || 'men'}'s {t.type || 'league'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-4">{t.gender || 'men'}'s {t.type || 'league'}</p>
                     
+                    {t.resultText && (
+                      <div className="mb-6 p-2 bg-slate-50 border border-slate-100 rounded flex items-center gap-2">
+                        <CheckCircle2 size={12} className="text-green-500" />
+                        <span className="text-[10px] font-black uppercase italic text-slate-600">{t.resultText}</span>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                      <span className="text-[10px] font-black uppercase text-primary">Outright Winner Available</span>
+                      <span className="text-[10px] font-black uppercase text-primary">
+                        {t.status === 'COMPLETED' ? 'View Final Standings' : 'Outright Winner Available'}
+                      </span>
                       <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all">
                         <ArrowRight size={16} />
                       </div>

@@ -20,6 +20,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         gender: series.gender,
         type: series.type,
         status: series.status,
+        resultText: series.resultText || null,
         lastUpdated: new Date().toISOString()
       }, { merge: true });
       seriesSyncedCount++;
@@ -28,13 +29,11 @@ export async function syncCricketMatchesAction(db: Firestore) {
     // 2. Sync Live Matches
     const liveMatches = await fetchLiveMatches();
     if (!liveMatches || liveMatches.length === 0) {
-      console.log("Sync Engine: No live matches found on network scanning.");
       return { success: true, count: 0, tournamentsCount: seriesSyncedCount };
     }
 
     let syncedCount = 0;
     for (const match of liveMatches) {
-      // Delay for Rate Limiting (1.2s between calls for Trial keys)
       await new Promise(resolve => setTimeout(resolve, 1200));
       
       if (!match.id) continue;
@@ -45,7 +44,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const matchId = match.id;
       const matchRef = doc(db, 'matches', matchId);
 
-      // Map Teams
       const teamA = matchData.teams[0] || 'TBA';
       const teamB = matchData.teams[1] || 'TBA';
 
@@ -65,7 +63,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
         }
       }, { merge: true });
 
-      // Ensure Market subcollection exists for the match winner
       const marketRef = doc(db, 'matches', matchId, 'markets', 'match_winner');
       await setDoc(marketRef, {
         id: 'match_winner',
