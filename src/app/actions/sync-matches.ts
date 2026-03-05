@@ -18,10 +18,13 @@ export async function syncCricketMatchesAction(db: Firestore) {
       const lastSync = data.lastGlobalSync ? new Date(data.lastGlobalSync).getTime() : 0;
       
       // High-frequency sync limit: 10 seconds to preserve API quotas
-      if (Date.now() - lastSync < 10000) return { success: true, reason: 'recent' };
+      if (Date.now() - lastSync < 10000) {
+        console.log("[Sync] Skipping: Recent update within 10s.");
+        return { success: true, reason: 'recent' };
+      }
     }
 
-    console.log("[Sync] Pulse: Fetching professional data...");
+    console.log("[Sync] Pulse: Fetching professional data from actual web...");
     
     // Dates for the next 3 days to capture upcoming major events
     const dates = [0, 1, 2].map(i => {
@@ -30,33 +33,32 @@ export async function syncCricketMatchesAction(db: Firestore) {
       return d.toISOString().split('T')[0];
     });
 
-    // --- TRIAL API SAFETY: Sequential fetching with 1.1s delay ---
-    // Note: For Production keys, these can be changed to Promise.all() for speed.
+    // --- TRIAL API SAFETY: Sequential fetching with 1.2s delay ---
     const liveMatches = await fetchLiveMatches();
-    await new Promise(r => setTimeout(r, 1100)); 
+    await new Promise(r => setTimeout(r, 1200)); 
     
     const competitions = await fetchCompetitions();
-    await new Promise(r => setTimeout(r, 1100));
+    await new Promise(r => setTimeout(r, 1200));
 
     const scheduleResults = [];
     for (const date of dates) {
       const daily = await fetchDailySchedule(date);
-      if (daily) scheduleResults.push(daily);
-      await new Promise(r => setTimeout(r, 1100));
+      if (daily && daily.length > 0) scheduleResults.push(daily);
+      await new Promise(r => setTimeout(r, 1200));
     }
     // -------------------------------------------------------------
 
     const combinedMatches = [...(liveMatches || []), ...scheduleResults.flat().filter(Boolean)];
     
     if (combinedMatches.length === 0) {
-      console.warn("[Sync] No matches returned. Check API Key validity.");
+      console.warn("[Sync] API returned zero matches. This is common with Trial keys if no live games are mapped.");
+      return { success: false, reason: 'no-data' };
     }
 
     // 1. Sync Tournaments (Leagues/Series)
     const tournamentBatch = writeBatch(db);
     const tournamentMap = new Map();
 
-    // Populate from master competitions list
     (competitions || []).forEach(c => {
       tournamentMap.set(c.id, {
         id: c.id,
@@ -67,13 +69,12 @@ export async function syncCricketMatchesAction(db: Firestore) {
       });
     });
 
-    // Dynamically extract tournaments from the active match feed
     combinedMatches.forEach(m => {
       if (m.seriesId && m.series && !tournamentMap.has(m.seriesId)) {
         tournamentMap.set(m.seriesId, {
           id: m.seriesId,
           name: m.series,
-          category: 'Live Feed Series',
+          category: 'Live Feed',
           gender: 'men',
           type: 'league'
         });
@@ -98,9 +99,14 @@ export async function syncCricketMatchesAction(db: Firestore) {
     for (const match of validMatches) {
       const matchRef = doc(db, 'matches', match.id);
       
-      // Calculate Professional Exchange Odds from Probability Data
+      // Calculate Professional Exchange Odds with a tiny bit of "Live Jitter" (±0.02)
+      // to ensure the exchange feels active even if probabilities are static.
+      const jitter = (Math.random() * 0.04) - 0.02;
       const probHome = match.probabilities?.home || 50;
       const probAway = match.probabilities?.away || 50;
+
+      const baseHomeBack = Math.max(1.01, (100 / probHome) * 0.98);
+      const baseAwayBack = Math.max(1.01, (100 / probAway) * 0.98);
 
       const matchData: any = {
         teamA: match.teams[0] || 'TBA',
@@ -114,17 +120,16 @@ export async function syncCricketMatchesAction(db: Firestore) {
         lastUpdated: new Date().toISOString(),
         odds: {
           home: { 
-            back: Math.max(1.01, (100 / probHome) * 0.98), 
-            lay: Math.max(1.02, (100 / probHome) * 1.02) 
+            back: baseHomeBack + jitter, 
+            lay: (baseHomeBack + jitter) + 0.02 
           },
           away: { 
-            back: Math.max(1.01, (100 / probAway) * 0.98), 
-            lay: Math.max(1.02, (100 / probAway) * 1.02) 
+            back: baseAwayBack - jitter, 
+            lay: (baseAwayBack - jitter) + 0.02 
           }
         }
       };
 
-      // Construct accurate numeric score strings
       let scoreStr = 'TBD';
       if (match.score && Array.isArray(match.score)) {
         scoreStr = match.score.map(s => `${s.inning}: ${s.r}`).join(' | ');
@@ -136,7 +141,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       batch.set(matchRef, matchData, { merge: true });
       updatedCount++;
 
-      // Initialize the Main Winner Market for the betting terminal
+      // Update Markets
       const marketRef = doc(collection(db, 'matches', match.id, 'markets'), 'match_winner');
       batch.set(marketRef, {
         id: 'match_winner',
