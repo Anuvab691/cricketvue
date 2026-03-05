@@ -9,7 +9,7 @@ export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
   
-  // Professional Odds decimals from the Betfair Pulse
+  // Odds decimals from the Betfair Pulse
   const homeBack = match.odds?.home?.back || 1.00;
   const homeLay = match.odds?.home?.lay || 0.00;
   const awayBack = match.odds?.away?.back || 1.00;
@@ -34,7 +34,7 @@ export function MatchRow({ match }: { match: any }) {
   const matchId = match.id || '';
 
   return (
-    <div className="match-row group h-auto min-h-[85px] py-4">
+    <div className="match-row group h-auto min-h-[90px] py-4">
       <div className="flex-1 flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <Link href={`/match/${matchId}`} className="font-black uppercase italic tracking-tighter text-slate-800 hover:text-primary transition-all text-sm md:text-base">
@@ -49,14 +49,14 @@ export function MatchRow({ match }: { match: any }) {
           )}
         </div>
         
-        {/* Score Display */}
-        {match.currentScore && (
+        {/* Score Display - Corrected field mapping */}
+        {(match.currentScore || match.score) && (
           <div className="flex items-center gap-2">
             <span className="text-xs md:text-sm font-mono text-primary font-black bg-primary/5 px-2 py-0.5 rounded-sm border border-primary/10">
-              {match.currentScore}
+              {match.currentScore || match.score}
             </span>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider italic">
-              {match.statusText || 'Update incoming...'}
+              {match.statusText || match.rawStatusText || 'Updating...'}
             </span>
           </div>
         )}
@@ -76,23 +76,23 @@ export function MatchRow({ match }: { match: any }) {
 
       <div className="w-[180px] flex justify-around items-center shrink-0">
         <div className="flex gap-0.5">
-          <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[36px]">
+          <div className="odds-box odds-blue w-[42px] h-[40px]">
             <span className="text-xs font-black">{homeBack > 1.00 ? homeBack.toFixed(2) : '-'}</span>
-          </Link>
-          <Link href={`/match/${matchId}`} className="odds-box odds-pink w-[38px] h-[36px]">
+          </div>
+          <div className="odds-box odds-pink w-[42px] h-[40px]">
             <span className="text-xs font-black">{homeLay > 0.00 ? homeLay.toFixed(2) : '-'}</span>
-          </Link>
+          </div>
         </div>
         
         <div className="w-px h-8 bg-slate-100 hidden md:block" />
 
         <div className="flex gap-0.5">
-          <Link href={`/match/${matchId}`} className="odds-box odds-blue w-[38px] h-[36px]">
+          <div className="odds-box odds-blue w-[42px] h-[40px]">
             <span className="text-xs font-black">{awayBack > 1.00 ? awayBack.toFixed(2) : '-'}</span>
-          </Link>
-          <Link href={`/match/${matchId}`} className="odds-box odds-pink w-[38px] h-[36px]">
+          </div>
+          <div className="odds-box odds-pink w-[42px] h-[40px]">
             <span className="text-xs font-black">{awayLay > 0.00 ? awayLay.toFixed(2) : '-'}</span>
-          </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { Firestore, doc, setDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { 
   fetchLiveMatches, 
   fetchMatchDetail, 
@@ -13,9 +13,9 @@ import {
 
 /**
  * Precision Sync Engine: Updates matches and professional Betfair odds in real-time.
- * Ensures the terminal shows "no more, no less" than what is currently live.
+ * Performs deep discovery down to the Market Book via POST listMarketBook.
  */
-export async function syncCricketMatchesAction(db: Firestore, options: { clearFirst?: boolean } = {}) {
+export async function syncCricketMatchesAction(db: Firestore) {
   try {
     // 1. Sync Series (Tournaments)
     const seriesList = await fetchLiveSeries();
@@ -31,79 +31,92 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
     const liveMatchesList = await fetchLiveMatches();
     const activeMatchIds = new Set<string>();
 
-    // Discovery Cache: Fetch competitions once to save API calls
-    const competitions = await fetchBetfairCompetitions('4'); // 4 = Cricket
+    // Discovery Cache: Fetch competitions once
+    const competitions = await fetchBetfairCompetitions('4'); 
 
     for (const matchSummary of liveMatchesList) {
-      // Respect API rate limits (Trial Key: ~2 req/sec)
-      await new Promise(resolve => setTimeout(resolve, 600));
+      // Respect trial API rate limits
+      await new Promise(resolve => setTimeout(resolve, 800));
       
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
       activeMatchIds.add(matchData.id);
 
-      // Default Odds Placeholder
+      // Default Odds 
       let marketOdds = {
         home: { back: 1.00, lay: 0.00 },
         away: { back: 1.00, lay: 0.00 }
       };
 
       let discoveredMarketId = null;
+      let runnerMapping: any[] = [];
 
-      // 3. Betfair Exchange Discovery Protocol
+      // 3. Betfair Discovery Chain
       try {
-        const homeTeam = (matchData.teams?.[0] || '').toLowerCase();
-        const awayTeam = (matchData.teams?.[1] || '').toLowerCase();
+        const homeTeam = (matchData.teamA || '').toLowerCase();
+        const awayTeam = (matchData.teamB || '').toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step A: Match competition
+        // Step A: Find matching competition
         const matchingComp = competitions.find((c: any) => {
-          const cName = (c.competition?.name || '').toLowerCase();
-          return seriesName.includes(cName) || cName.includes(seriesName) || 
-                 homeTeam.includes(cName) || awayTeam.includes(cName);
+          const name = (c.competition?.name || '').toLowerCase();
+          return seriesName.includes(name) || name.includes(seriesName);
         });
 
         if (matchingComp) {
           // Step B: Fetch Events
           const events = await fetchBetfairEvents(matchingComp.competition.id, '4');
           const matchingEvent = events.find((e: any) => {
-            const eName = (e.event?.name || '').toLowerCase();
-            return eName.includes(homeTeam) || eName.includes(awayTeam);
+            const name = (e.event?.name || '').toLowerCase();
+            return name.includes(homeTeam) || name.includes(awayTeam);
           });
 
           if (matchingEvent) {
             // Step C: Fetch Markets
             const markets = await fetchBetfairMarkets(matchingEvent.event.id, '4');
             const winnerMarket = markets.find((m: any) => 
-              ['Match Odds', 'Winner', 'Match Betting', 'Match Winner'].some(term => 
+              ['Match Odds', 'Winner', 'Match Betting'].some(term => 
                 (m.marketName || '').toLowerCase().includes(term.toLowerCase())
               )
             );
             
             if (winnerMarket) {
               discoveredMarketId = winnerMarket.marketId;
+              runnerMapping = winnerMarket.runners || [];
+
               // Step D: Fetch Live Market Book via POST
               const book = await fetchMarketBook(discoveredMarketId, '4');
               
-              if (book && book.runners && book.runners.length >= 2) {
+              if (book && book.runners) {
+                // Precision Match: Link Betfair runners to Team A / Team B by name
+                const homeRunner = book.runners.find((r: any) => {
+                  const meta = runnerMapping.find(m => m.selectionId === r.selectionId);
+                  return (meta?.runnerName || '').toLowerCase().includes(homeTeam);
+                }) || book.runners[0];
+
+                const awayRunner = book.runners.find((r: any) => {
+                  const meta = runnerMapping.find(m => m.selectionId === r.selectionId);
+                  return (meta?.runnerName || '').toLowerCase().includes(awayTeam);
+                }) || book.runners[1];
+
                 marketOdds = {
                   home: { 
-                    back: book.runners[0]?.ex?.availableToBack?.[0]?.price || 1.00,
-                    lay: book.runners[0]?.ex?.availableToLay?.[0]?.price || 0.00
+                    back: homeRunner?.ex?.availableToBack?.[0]?.price || 1.00,
+                    lay: homeRunner?.ex?.availableToLay?.[0]?.price || 0.00
                   },
                   away: { 
-                    back: book.runners[1]?.ex?.availableToBack?.[0]?.price || 1.00,
-                    lay: book.runners[1]?.ex?.availableToLay?.[0]?.price || 0.00
+                    back: awayRunner?.ex?.availableToBack?.[0]?.price || 1.00,
+                    lay: awayRunner?.ex?.availableToLay?.[0]?.price || 0.00
                   }
                 };
               }
             }
           }
         }
-      } catch (betfairErr) {
-        // Silent fail on discovery steps to allow score-only sync
+      } catch (discoveryErr) {
+        // Fallback to score-only if discovery fails
       }
 
-      // 4. In-Place Update: Stable ID ensures no duplicates when score changes
+      // 4. In-Place Update
       const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         ...matchData,
@@ -113,7 +126,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         marketId: discoveredMarketId
       }, { merge: true });
 
-      // Update Market Sub-collection for the detail view
+      // Update Market Sub-collection
       const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
       await setDoc(marketSubRef, {
         id: 'match_winner',
@@ -122,13 +135,13 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         selections: [
           { 
             id: 'home', 
-            name: matchData.teams?.[0] || 'Team A', 
+            name: matchData.teamA, 
             odds: marketOdds.home.back, 
             layOdds: marketOdds.home.lay || (marketOdds.home.back > 1 ? marketOdds.home.back + 0.02 : 0)
           },
           { 
             id: 'away', 
-            name: matchData.teams?.[1] || 'Team B', 
+            name: matchData.teamB, 
             odds: marketOdds.away.back, 
             layOdds: marketOdds.away.lay || (marketOdds.away.back > 1 ? marketOdds.away.back + 0.02 : 0)
           }
@@ -136,44 +149,35 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       }, { merge: true });
     }
 
-    // 5. "No More No Less" Pruning: Remove matches that are no longer active in the professional feed
-    const existingMatchesSnap = await getDocs(collection(db, 'matches'));
-    const pruneBatch = writeBatch(db);
-    let prunedCount = 0;
-
-    existingMatchesSnap.docs.forEach(doc => {
+    // 5. Cleanup Stale Matches (No more no less)
+    const existingSnap = await getDocs(collection(db, 'matches'));
+    const batch = writeBatch(db);
+    let pruned = 0;
+    existingSnap.forEach(doc => {
       if (!activeMatchIds.has(doc.id)) {
-        pruneBatch.delete(doc.ref);
-        prunedCount++;
+        batch.delete(doc.ref);
+        pruned++;
       }
     });
-    
-    if (prunedCount > 0) {
-      await pruneBatch.commit();
-    }
+    if (pruned > 0) await batch.commit();
 
     return { 
       success: true, 
       count: liveMatchesList.length, 
       tournamentsCount: seriesList.length,
-      prunedCount 
+      pruned 
     };
   } catch (error: any) {
-    console.error("Professional Sync Error:", error);
+    console.error("Precision Sync Error:", error);
     return { success: false, error: error.message };
   }
 }
 
-/**
- * Purges all matches from the terminal.
- */
 export async function clearAllMatchesAction(db: Firestore) {
   try {
     const querySnapshot = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
-    querySnapshot.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
+    querySnapshot.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
     return { success: true };
   } catch (error: any) {

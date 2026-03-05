@@ -12,7 +12,7 @@ export interface ExternalMatch {
   status: string;
   venue: string;
   date: string;
-  startTime: string; // Map date to startTime for schema
+  startTime: string; 
   series?: string;
   seriesId?: string;
   teamA: string;
@@ -78,7 +78,7 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 }
 
 /**
- * Betfair Discovery Phase 1: Fetches active competitions for a sport.
+ * Betfair Discovery Phase 1: Fetches active competitions.
  */
 export async function fetchBetfairCompetitions(sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/${sportId}`);
@@ -86,7 +86,7 @@ export async function fetchBetfairCompetitions(sportId: string = '4') {
 }
 
 /**
- * Betfair Discovery Phase 2: Fetches events for a specific competition.
+ * Betfair Discovery Phase 2: Fetches events for a competition.
  */
 export async function fetchBetfairEvents(competitionId: string, sportId: string = '4') {
   const json = await fetchFromSportbex(`betfair/event/${sportId}/${competitionId}`);
@@ -102,9 +102,10 @@ export async function fetchBetfairMarkets(eventId: string, sportId: string = '4'
 }
 
 /**
- * Betfair Pulse: Fetches the Market Book (odds/prices) via POST.
+ * Betfair Pulse: Fetches the Market Book via POST.
  */
 export async function fetchMarketBook(marketId: string, sportId: string = '4') {
+  // STRICT adherence to the required curl format: {"marketIds": "market id"}
   const json = await fetchFromSportbex(`betfair/listMarketBook/${sportId}`, 'POST', { 
     marketIds: marketId 
   });
@@ -162,7 +163,7 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 }
 
 /**
- * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
+ * Transformer: Maps Sportbex JSON to Terminal Match schema with robust team extraction.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -171,12 +172,19 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   let homeName = 'TBA';
   let awayName = 'TBA';
 
-  if (Array.isArray(match.teams)) {
+  if (Array.isArray(match.teams) && match.teams.length >= 2) {
     homeName = match.teams[0]?.name || match.teams[0] || 'TBA';
     awayName = match.teams[1]?.name || match.teams[1] || 'TBA';
-  } else {
-    homeName = teamsData.t1?.name || match.home_team_name || match.teamA || 'TBA';
-    awayName = teamsData.t2?.name || match.away_team_name || match.teamB || 'TBA';
+  } else if (teamsData.t1 || teamsData.t2) {
+    homeName = teamsData.t1?.name || match.home_team_name || 'TBA';
+    awayName = teamsData.t2?.name || match.away_team_name || 'TBA';
+  } else if (match.teamA && match.teamB) {
+    homeName = match.teamA;
+    awayName = match.teamB;
+  } else if (match.name && match.name.includes(' v ')) {
+    const parts = match.name.split(' v ');
+    homeName = parts[0];
+    awayName = parts[1];
   }
   
   let scoreText = '';
@@ -193,11 +201,10 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
 
   const statusRaw = (match.status || '').toUpperCase();
   const isCompleted = statusRaw === 'COMPLETED' || statusRaw === 'FINISHED';
-  const isLive = match.isLive === true || statusRaw === 'LIVE' || statusRaw === 'IN PLAY' || !!t1.score;
-  const matchStartTime = match.startDate || match.date || new Date().toISOString();
+  const isLive = match.isLive === true || statusRaw === 'LIVE' || statusRaw === 'IN PLAY' || !!t1.score || !!match.current_score;
 
-  // Stable ID Generation
-  let finalId = originalId || match.id?.toString() || `${homeName} vs ${awayName}`;
+  // Stable ID Generation (Sanitized for URLs)
+  let finalId = originalId || match.id?.toString() || `${homeName}-${awayName}`;
   finalId = finalId.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toUpperCase();
 
   return {
@@ -206,8 +213,8 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     matchType: match.format || 'cricket',
     status: isCompleted ? 'finished' : (isLive ? 'live' : 'upcoming'),
     venue: match.ground || match.venue || 'Global Stadium',
-    date: matchStartTime,
-    startTime: matchStartTime,
+    date: match.startDate || match.date || new Date().toISOString(),
+    startTime: match.startDate || match.date || new Date().toISOString(),
     series: match.seriesName || match.series || 'International Series',
     seriesId: match.seriesId?.toString(),
     teamA: homeName,
@@ -216,6 +223,7 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
     score: scoreText,
     matchStarted: isLive || isCompleted,
     matchEnded: isCompleted,
-    rawStatusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled')
+    rawStatusText: match.result?.message || match.status_text || (isLive ? 'In Play' : 'Scheduled'),
+    marketId: match.marketId || null
   };
 }
