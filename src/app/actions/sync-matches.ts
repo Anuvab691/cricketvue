@@ -47,6 +47,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
         const e = betfairEvent.event;
         if (!e || !e.name) continue;
 
+        // Link Sportbex match to Betfair Event
         const matchedMatch = liveMatchesList.find(m => {
           const mName = (m.name || '').toLowerCase();
           const eName = (e.name || '').toLowerCase();
@@ -73,14 +74,6 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }
     }
 
-    // 4. Phase 3: High-Frequency Pulse (listMarketBook POST)
-    const marketIdsArray = Array.from(matchToBetfairMap.values()).map(b => b.marketId);
-    const marketIdsString = marketIdsArray.join(', ');
-    let marketBooks: any[] = [];
-    if (marketIdsString) {
-      marketBooks = await fetchMarketOdds(marketIdsString, '4') || [];
-    }
-
     // 5. Update Matches & Fetch Micro-Markets
     for (const matchSummary of liveMatchesList) {
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
@@ -90,10 +83,15 @@ export async function syncCricketMatchesAction(db: Firestore) {
       let professionalOdds = null;
 
       if (betfairInfo) {
-        const book = marketBooks.find(b => b && b.marketId === betfairInfo.marketId);
+        // Phase 3: High-Frequency Pulse (listMarketBook POST) for this specific marketId
+        const marketBooks = await fetchMarketOdds(betfairInfo.marketId);
+        const book = (marketBooks || []).find((b: any) => b && b.marketId === betfairInfo.marketId);
+
         if (book && book.runners && book.runners.length >= 2) {
-          // Home / Away mapping based on professional book structure
+          // Professional Runner-to-Team mapping
+          // Runner 1 (Back/Lay)
           const runner1 = book.runners[0];
+          // Runner 2 (Back/Lay)
           const runner2 = book.runners[1];
 
           professionalOdds = {
@@ -161,7 +159,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
           }
         }
 
-        // Premium Fancy load
+        // Premium Fancy pulse
         const premiumData = await fetchPremiumFancy(betfairInfo.eventId);
         if (premiumData && Array.isArray(premiumData)) {
           setDoc(doc(db, 'matches', matchData.id, 'markets', 'premium_fancy'), {
