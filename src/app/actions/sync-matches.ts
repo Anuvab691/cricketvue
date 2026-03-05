@@ -1,6 +1,6 @@
 'use client';
 
-import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { Firestore, doc, setDoc, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { 
   fetchLiveMatches, 
   fetchMatchDetail, 
@@ -12,8 +12,8 @@ import {
 } from '@/services/cricket-api-service';
 
 /**
- * Intelligent Sync Engine: Updates matches and professional Betfair odds in real-time.
- * Performs background "Upserts" to ensure scores update seamlessly without disappearing.
+ * Precision Sync Engine: Updates matches and professional Betfair odds in real-time.
+ * Ensures the terminal shows "no more, no less" than what is currently live.
  */
 export async function syncCricketMatchesAction(db: Firestore, options: { clearFirst?: boolean } = {}) {
   try {
@@ -21,7 +21,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       await clearAllMatchesAction(db);
     }
 
-    // 1. Sync Series (Tournaments) from the 2026 Pulse Feed
+    // 1. Sync Series (Tournaments) from the 2026 Feed
     const seriesList = await fetchLiveSeries();
     for (const series of seriesList) {
       if (!series.id) continue;
@@ -31,17 +31,21 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       }, { merge: true });
     }
 
-    // 2. Sync Live Matches and Betfair Odds Discovery
+    // 2. Sync Live Matches and Betfair Odds
     const liveMatchesList = await fetchLiveMatches();
     const competitions = await fetchBetfairCompetitions('4'); // 4 = Cricket
 
+    // Track active IDs to perform "No more no less" pruning
+    const activeMatchIds = new Set<string>();
+
     for (const matchSummary of liveMatchesList) {
-      // Respect trial API rate limits - small throttle between pulses
+      // Respect trial API rate limits
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const matchData = await fetchMatchDetail(matchSummary.id) || matchSummary;
+      activeMatchIds.add(matchData.id);
 
-      // Default Odds Schema (Liquidity Placeholder)
+      // Default Odds Placeholder
       let marketOdds = {
         home: { back: 1.00, lay: 0.00 },
         away: { back: 1.00, lay: 0.00 }
@@ -49,13 +53,13 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
 
       let discoveredMarketId = null;
 
-      // 3. Betfair Exchange Discovery Protocol (Pulse Chain)
+      // 3. Betfair Exchange Discovery Protocol
       try {
         const homeTeam = (matchData.teams?.[0] || '').toLowerCase();
         const awayTeam = (matchData.teams?.[1] || '').toLowerCase();
         const seriesName = (matchData.series || '').toLowerCase();
 
-        // Step A: Find matching competition
+        // Step A: Find competition
         const matchingComp = competitions.find((c: any) => {
           const cName = (c.competition?.name || '').toLowerCase();
           return seriesName.includes(cName) || cName.includes(seriesName) || 
@@ -63,7 +67,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         });
 
         if (matchingComp) {
-          // Step B: Fetch Events for Competition
+          // Step B: Fetch Events
           const events = await fetchBetfairEvents(matchingComp.competition.id, '4');
           const matchingEvent = events.find((e: any) => {
             const eName = (e.event?.name || '').toLowerCase();
@@ -71,7 +75,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           });
 
           if (matchingEvent) {
-            // Step C: Fetch Markets for Event
+            // Step C: Fetch Markets
             const markets = await fetchBetfairMarkets(matchingEvent.event.id, '4');
             const winnerMarket = markets.find((m: any) => 
               ['Match Odds', 'Winner', 'Match Betting'].some(term => m.marketName?.includes(term))
@@ -79,7 +83,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
             
             if (winnerMarket) {
               discoveredMarketId = winnerMarket.marketId;
-              // Step D: Fetch Market Book (Prices) via POST
+              // Step D: Fetch Market Book
               const book = await fetchMarketBook(discoveredMarketId, '4');
               
               if (book && book.runners && book.runners.length >= 2) {
@@ -98,11 +102,10 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
           }
         }
       } catch (betfairErr) {
-        // Silent fail on odds discovery to keep score updates moving if Betfair is unreachable
+        // Silent fail on odds
       }
 
-      // 4. In-Place Update: Triggers real-time UI refresh for components using useCollection/useDoc
-      // We use setDoc with merge: true to ensure we only update scores/odds without deleting the doc.
+      // 4. In-Place Update (Ensures scores refresh without new entries)
       const matchRef = doc(db, 'matches', matchData.id);
       await setDoc(matchRef, {
         ...matchData,
@@ -112,7 +115,7 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
         marketId: discoveredMarketId
       }, { merge: true });
 
-      // Update Market Sub-collection for the Betting Panel
+      // Update Market Sub-collection
       const marketSubRef = doc(db, 'matches', matchData.id, 'markets', 'match_winner');
       await setDoc(marketSubRef, {
         id: 'match_winner',
@@ -135,13 +138,30 @@ export async function syncCricketMatchesAction(db: Firestore, options: { clearFi
       }, { merge: true });
     }
 
-    // CRITICAL: We NO LONGER prune matches here to prevent flickering or vanishing.
-    // The user prefers the list to be stable, simply updating scores in place.
-    // Manual cleanup is available via "Purge All" in the Dashboard.
+    // 5. "No More No Less" Pruning: Remove matches that are no longer in the live feed
+    const existingMatchesSnap = await getDocs(collection(db, 'matches'));
+    const pruneBatch = writeBatch(db);
+    let prunedCount = 0;
 
-    return { success: true, count: liveMatchesList.length, tournamentsCount: seriesList.length };
+    existingMatchesSnap.docs.forEach(doc => {
+      if (!activeMatchIds.has(doc.id)) {
+        pruneBatch.delete(doc.ref);
+        prunedCount++;
+      }
+    });
+    
+    if (prunedCount > 0) {
+      await pruneBatch.commit();
+    }
+
+    return { 
+      success: true, 
+      count: liveMatchesList.length, 
+      tournamentsCount: seriesList.length,
+      prunedCount 
+    };
   } catch (error: any) {
-    console.error("Professional Pulse Error:", error);
+    console.error("Professional Sync Error:", error);
     return { success: false, error: error.message };
   }
 }

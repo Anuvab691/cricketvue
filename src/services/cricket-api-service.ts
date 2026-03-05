@@ -160,6 +160,7 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transformer: Maps Sportbex JSON (t1/t2 structure) to Terminal Match schema.
+ * Ensures IDs are stable and URL-safe to prevent duplicate entries.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
@@ -182,11 +183,12 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = status === 'COMPLETED' || status === 'finished';
   const isLive = match.isLive === true || status === 'LIVE' || status === 'In Play' || !!t1.score;
 
-  // Preserve ID strictly to avoid mismatch.
-  let finalId = originalId || match.id?.toString() || Math.random().toString(36).substr(2, 9);
+  // Use the API ID if available, otherwise sanitize the name.
+  // This is critical for preventing duplicate entries in the terminal.
+  let finalId = originalId || match.id?.toString() || `${homeName} v ${awayName}`;
   
-  // Sanitization: Remove spaces from IDs for URL stability
-  finalId = finalId.replace(/\s+/g, '-').toUpperCase();
+  // Sanitize: Replace spaces and special chars with hyphens, and uppercase for stability
+  finalId = finalId.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toUpperCase();
 
   return {
     id: finalId,
