@@ -30,11 +30,9 @@ export interface ExternalTournament {
 }
 
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
-const CRICKET_SPORT_ID = "4";
 
 /**
  * Core fetcher utilizing header-based authentication for Sportbex.
- * Strictly adheres to the documented 'sportbex-api-key' header.
  */
 async function fetchFromSportbex(endpoint: string) {
   const apiKey = process.env.SPORTBEX_API_KEY;
@@ -56,7 +54,7 @@ async function fetchFromSportbex(endpoint: string) {
     });
     
     if (response.status === 401 || response.status === 403) {
-      console.warn("Sportbex Auth Error: Unauthorized access. Check header config.");
+      console.warn("Sportbex Auth Error: Unauthorized access.");
       return null;
     }
 
@@ -70,44 +68,22 @@ async function fetchFromSportbex(endpoint: string) {
 }
 
 /**
- * Fetches Cricket competitions (Tournaments) from Betfair endpoint.
- */
-export async function fetchCompetitions(): Promise<ExternalTournament[]> {
-  try {
-    const json = await fetchFromSportbex(`betfair/competitions/${CRICKET_SPORT_ID}`);
-    if (!json || !json.data) return [];
-    
-    return json.data.map((c: any) => ({
-      id: c.id?.toString(),
-      name: c.name || 'Unknown Series',
-      category: 'Betfair',
-      gender: 'men',
-      type: 'league'
-    }));
-  } catch (e) {
-    return [];
-  }
-}
-
-/**
- * Fetches high-level list of all live matches.
+ * Fetches high-level list of all live matches from the network pulse.
  */
 export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
 
-    // The live list provides the IDs we need for detailed sync
     return json.data.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
-    console.error("Sportbex Live Score Fetch Failed:", e);
+    console.error("Sportbex Live Pulse Fetch Failed:", e);
     return [];
   }
 }
 
 /**
  * Fetches deep-dive match data for a specific match ID.
- * Required for capturing detailed scores and ball-by-ball status.
  */
 export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch | null> {
   try {
@@ -122,19 +98,23 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
 
 /**
  * Transforms Sportbex Live Match schema into Terminal Match schema.
- * Handles both list and detail response formats.
  */
 function transformSportbexLiveMatch(match: any): ExternalMatch {
   const homeName = match.home_team || match.home?.name || 'TBA';
   const awayName = match.away_team || match.away?.name || 'TBA';
   
-  // Construct a score string if available
   let scoreText = undefined;
   const hScore = match.score_home ?? match.home_score;
   const aScore = match.score_away ?? match.away_score;
+  const hWickets = match.home_wickets;
+  const aWickets = match.away_wickets;
+  const hOvers = match.home_overs;
+  const aOvers = match.away_overs;
   
   if (hScore !== undefined && aScore !== undefined) {
-    scoreText = `${hScore} - ${aScore}`;
+    scoreText = `${homeName} ${hScore}/${hWickets || 0} (${hOvers || '0.0'}) vs ${awayName} ${aScore}/${aWickets || 0} (${aOvers || '0.0'})`;
+  } else if (match.current_score) {
+    scoreText = match.current_score;
   }
 
   return {

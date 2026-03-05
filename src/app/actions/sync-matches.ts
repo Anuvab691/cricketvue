@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
@@ -6,9 +5,11 @@ import { fetchLiveMatches, fetchMatchDetail } from '@/services/cricket-api-servi
 
 /**
  * Sync Engine: Re-activated to fetch high-fidelity data from Sportbex.
+ * Performs a clear and repopulate cycle to ensure the Match Terminal is fresh.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
+    // 1. Fetch Pulse
     const liveMatches = await fetchLiveMatches();
     if (!liveMatches || liveMatches.length === 0) {
       console.log("Sync Engine: No live matches found on network.");
@@ -17,9 +18,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     let syncedCount = 0;
     for (const match of liveMatches) {
-      // Small delay to respect Sportbex Trial API limits (1 req/sec)
+      // 2. Delay for Rate Limiting (1.2s between calls for Trial keys)
       await new Promise(resolve => setTimeout(resolve, 1200));
       
+      // 3. Deep Sync Detail
       const detail = await fetchMatchDetail(match.id);
       const matchData = detail || match;
 
@@ -40,9 +42,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
         }
       }, { merge: true });
 
-      // Ensure at least one market exists for betting
+      // Ensure Market subcollection exists
       const marketRef = doc(db, 'matches', match.id, 'markets', 'match_winner');
       await setDoc(marketRef, {
+        id: 'match_winner',
         type: 'match_winner',
         status: 'open',
         selections: [
