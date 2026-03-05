@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, LogIn, Smartphone, UserCircle2 } from 'lucide-react';
+import { Loader2, LogIn, UserCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
@@ -137,14 +137,6 @@ export default function LoginPage() {
                 <Link href="#" className="text-[#0077b6] mx-1">Terms of Service</Link> 
                 apply.
               </p>
-
-              <Link 
-                href="#" 
-                className="inline-flex items-center gap-2 text-[#0077b6] font-bold text-sm hover:underline py-2"
-              >
-                <Smartphone className="w-5 h-5" />
-                Download APK
-              </Link>
             </div>
           </CardContent>
         </Card>
