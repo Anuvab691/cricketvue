@@ -4,8 +4,8 @@ import { doc, setDoc, collection, Firestore, getDocs, writeBatch, getDoc } from 
 import { fetchLiveMatches, fetchDailySchedule, fetchCompetitions } from '@/services/cricket-api-service';
 
 /**
- * Synchronizes live/upcoming matches AND tournaments from Sportradar to Firestore.
- * Optimized for both Trial (sequential) and Production (high-frequency) keys.
+ * Synchronizes live/upcoming matches AND tournaments from Sportbex to Firestore.
+ * High-frequency synchronization for professional exchange terminals.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -17,45 +17,34 @@ export async function syncCricketMatchesAction(db: Firestore) {
       if (data.syncStatus === 'clearing') return { success: false, reason: 'clearing' };
       const lastSync = data.lastGlobalSync ? new Date(data.lastGlobalSync).getTime() : 0;
       
-      // High-frequency sync limit: 10 seconds to preserve API quotas
+      // Auto-sync protection: ensure at least 10s between network pulses
       if (Date.now() - lastSync < 10000) {
-        console.log("[Sync] Skipping: Recent update within 10s.");
         return { success: true, reason: 'recent' };
       }
     }
 
-    console.log("[Sync] Pulse: Fetching professional data from actual web...");
-    
-    // Dates for the next 3 days to capture upcoming major events
-    const dates = [0, 1, 2].map(i => {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      return d.toISOString().split('T')[0];
-    });
-
-    // --- TRIAL API SAFETY: Sequential fetching with 1.2s delay ---
+    // 1. Fetch Fresh Data from Sportbex
     const liveMatches = await fetchLiveMatches();
-    await new Promise(r => setTimeout(r, 1200)); 
-    
     const competitions = await fetchCompetitions();
-    await new Promise(r => setTimeout(r, 1200));
 
-    const scheduleResults = [];
-    for (const date of dates) {
-      const daily = await fetchDailySchedule(date);
-      if (daily && daily.length > 0) scheduleResults.push(daily);
-      await new Promise(r => setTimeout(r, 1200));
-    }
-    // -------------------------------------------------------------
+    // Fetch next 2 days to populate upcoming terminal
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayAfter = new Date();
+    dayAfter.setDate(dayAfter.getDate() + 2);
+    
+    const [sched1, sched2] = await Promise.all([
+      fetchDailySchedule(tomorrow.toISOString().split('T')[0]),
+      fetchDailySchedule(dayAfter.toISOString().split('T')[0])
+    ]);
 
-    const combinedMatches = [...(liveMatches || []), ...scheduleResults.flat().filter(Boolean)];
+    const combinedMatches = [...(liveMatches || []), ...(sched1 || []), ...(sched2 || [])];
     
     if (combinedMatches.length === 0) {
-      console.warn("[Sync] API returned zero matches. This is common with Trial keys if no live games are mapped.");
       return { success: false, reason: 'no-data' };
     }
 
-    // 1. Sync Tournaments (Leagues/Series)
+    // 2. Sync Tournaments
     const tournamentBatch = writeBatch(db);
     const tournamentMap = new Map();
 
@@ -69,6 +58,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
       });
     });
 
+    // Also extract from matches
     combinedMatches.forEach(m => {
       if (m.seriesId && m.series && !tournamentMap.has(m.seriesId)) {
         tournamentMap.set(m.seriesId, {
@@ -88,7 +78,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
     });
     await tournamentBatch.commit();
 
-    // 2. Sync Individual Matches
+    // 3. Sync Matches
     const matchMap = new Map();
     combinedMatches.forEach(m => { if (m?.id) matchMap.set(m.id, m); });
     
@@ -99,11 +89,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
     for (const match of validMatches) {
       const matchRef = doc(db, 'matches', match.id);
       
-      // Calculate Professional Exchange Odds with a tiny bit of "Live Jitter" (±0.02)
-      // to ensure the exchange feels active even if probabilities are static.
-      const jitter = (Math.random() * 0.04) - 0.02;
+      // Calculate Exchange Odds (Back/Lay) from probabilities
       const probHome = match.probabilities?.home || 50;
       const probAway = match.probabilities?.away || 50;
+      const jitter = (Math.random() * 0.04) - 0.02;
 
       const baseHomeBack = Math.max(1.01, (100 / probHome) * 0.98);
       const baseAwayBack = Math.max(1.01, (100 / probAway) * 0.98);
@@ -119,14 +108,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
         seriesId: match.seriesId || '',
         lastUpdated: new Date().toISOString(),
         odds: {
-          home: { 
-            back: baseHomeBack + jitter, 
-            lay: (baseHomeBack + jitter) + 0.02 
-          },
-          away: { 
-            back: baseAwayBack - jitter, 
-            lay: (baseAwayBack - jitter) + 0.02 
-          }
+          home: { back: baseHomeBack + jitter, lay: (baseHomeBack + jitter) + 0.02 },
+          away: { back: baseAwayBack - jitter, lay: (baseAwayBack - jitter) + 0.02 }
         }
       };
 
@@ -141,15 +124,15 @@ export async function syncCricketMatchesAction(db: Firestore) {
       batch.set(matchRef, matchData, { merge: true });
       updatedCount++;
 
-      // Update Markets
+      // Update Market Sub-collection
       const marketRef = doc(collection(db, 'matches', match.id, 'markets'), 'match_winner');
       batch.set(marketRef, {
         id: 'match_winner',
         type: 'match_winner',
         status: match.status === 'finished' ? 'closed' : 'open',
         selections: [
-          { id: 'home', name: matchData.teamA, odds: matchData.odds.home.back, layOdds: matchData.odds.home.lay },
-          { id: 'away', name: matchData.teamB, odds: matchData.odds.away.back, layOdds: matchData.odds.away.lay }
+          { id: 'home', name: matchData.teamA, odds: matchData.odds.home.back },
+          { id: 'away', name: matchData.teamB, odds: matchData.odds.away.back }
         ]
       }, { merge: true });
     }
@@ -163,7 +146,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     return { success: true, count: updatedCount, tournamentsCount: filteredTournaments.length };
   } catch (error: any) {
-    console.error("Sync Critical Failure:", error);
+    console.error("Sportbex Sync Failure:", error);
     return { success: false, error: error.message };
   }
 }
@@ -177,8 +160,7 @@ export async function clearAllMatchesAction(db: Firestore) {
     for (const col of collections) {
       const snap = await getDocs(collection(db, col));
       for (const docSnap of snap.docs) {
-        const subCol = 'markets';
-        const subSnap = await getDocs(collection(db, col, docSnap.id, subCol));
+        const subSnap = await getDocs(collection(db, col, docSnap.id, 'markets'));
         const b = writeBatch(db);
         subSnap.docs.forEach(d => b.delete(d.ref));
         b.delete(docSnap.ref);
