@@ -18,12 +18,16 @@ import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 import { toast } from '@/hooks/use-toast';
 
 export default function MatchPage() {
-  const { id } = useParams();
+  const params = useParams();
   const router = useRouter();
   const firestore = useFirestore();
   const auth = useAuth();
   const { user } = useUser();
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Explicitly decode the ID to handle spaces and special characters from the URL
+  const rawId = params?.id as string;
+  const id = rawId ? decodeURIComponent(rawId) : null;
   
   const effectiveUserId = user?.uid || 'guest';
 
@@ -35,12 +39,12 @@ export default function MatchPage() {
 
   const matchRef = useMemoFirebase(() => {
     if (!firestore || !id) return null;
-    return doc(firestore, 'matches', id as string);
+    return doc(firestore, 'matches', id);
   }, [firestore, id]);
 
   const marketsQuery = useMemoFirebase(() => {
     if (!firestore || !id) return null;
-    return collection(firestore, 'matches', id as string, 'markets');
+    return collection(firestore, 'matches', id, 'markets');
   }, [firestore, id]);
 
   const { data: match, loading: matchLoading } = useDoc(matchRef);

@@ -147,11 +147,21 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = match.status === 'COMPLETED' || match.status === 'finished';
   const isLive = match.isLive === true || match.status === 'LIVE' || match.status === 'In Play';
 
-  // ID Resolution: Prefer originalId, then explicit ID fields, then generate from series/name
-  const finalId = originalId || 
+  // ID Resolution: Prefer originalId, then explicit ID fields.
+  // If fallback to concatenation is needed, sanitize it to avoid spaces and special characters.
+  let finalId = originalId || 
                  match.id?.toString() || 
-                 match.matchId?.toString() || 
-                 (match.seriesId && match.name ? `${match.seriesId}-${match.name}` : Math.random().toString(36).substr(2, 9));
+                 match.matchId?.toString();
+
+  if (!finalId && match.seriesId && match.name) {
+    // Sanitize concatenation: Replace all whitespace with hyphens and remove problematic characters
+    const safeName = match.name.toString().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+    finalId = `${match.seriesId}-${safeName}`.toUpperCase();
+  }
+  
+  if (!finalId) {
+    finalId = Math.random().toString(36).substr(2, 9);
+  }
 
   return {
     id: finalId,
