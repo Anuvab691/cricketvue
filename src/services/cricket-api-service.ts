@@ -170,9 +170,12 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const homeName = t1.name || match.home_team_name || match.teamA || 'TBA';
   const awayName = t2.name || match.away_team_name || match.teamB || 'TBA';
   
+  // High-fidelity score extraction from the nested team structure
   let scoreText = '';
-  if (t1.score || t2.score) {
-    scoreText = `${homeName}: ${t1.score || '0/0'} | ${awayName}: ${t2.score || '0/0'}`;
+  if (t1.score && t2.score) {
+    scoreText = `${t1.score} v ${t2.score}`;
+  } else if (t1.score || t2.score) {
+    scoreText = t1.score || t2.score;
   } else if (match.score) {
     scoreText = match.score;
   }
