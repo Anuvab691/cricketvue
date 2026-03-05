@@ -21,14 +21,6 @@ export interface ExternalMatch {
   rawStatusText?: string;
 }
 
-export interface ExternalTournament {
-  id: string;
-  name: string;
-  category: string;
-  gender: string;
-  type: string;
-}
-
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
 
 /**
@@ -75,7 +67,9 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
 
-    return json.data.map((match: any) => transformSportbexLiveMatch(match));
+    // Sportbex sometimes returns data in a 'data' array or directly.
+    const matchesArray = Array.isArray(json.data) ? json.data : (json.data?.matches || []);
+    return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
     console.error("Sportbex Live Pulse Fetch Failed:", e);
     return [];
@@ -98,14 +92,31 @@ export async function fetchMatchDetail(matchId: string): Promise<ExternalMatch |
 
 /**
  * Transforms Sportbex Live Match schema into Terminal Match schema.
+ * Robust mapping to handle multiple variations of field names.
  */
 function transformSportbexLiveMatch(match: any): ExternalMatch {
-  const homeName = match.home_team || match.home?.name || 'TBA';
-  const awayName = match.away_team || match.away?.name || 'TBA';
+  // Try to find team names in multiple common locations
+  let homeName = match.home_team_name || match.home_team || match.teama || match.team_a || match.home_name || match.home?.name;
+  let awayName = match.away_team_name || match.away_team || match.teamb || match.team_b || match.away_name || match.away?.name;
+
+  // Fallback: If individual names are missing, try to parse the 'name' or 'eventName' field
+  const fullName = match.name || match.eventName || match.event_name || '';
+  if ((!homeName || homeName === 'TBA') && fullName.includes(' v ')) {
+    const parts = fullName.split(' v ');
+    homeName = parts[0]?.trim();
+    awayName = parts[1]?.trim();
+  } else if ((!homeName || homeName === 'TBA') && fullName.includes(' vs ')) {
+    const parts = fullName.split(' vs ');
+    homeName = parts[0]?.trim();
+    awayName = parts[1]?.trim();
+  }
+
+  homeName = homeName || 'TBA';
+  awayName = awayName || 'TBA';
   
   let scoreText = undefined;
-  const hScore = match.score_home ?? match.home_score;
-  const aScore = match.score_away ?? match.away_score;
+  const hScore = match.score_home ?? match.home_score ?? match.home_runs;
+  const aScore = match.score_away ?? match.away_score ?? match.away_runs;
   const hWickets = match.home_wickets;
   const aWickets = match.away_wickets;
   const hOvers = match.home_overs;
@@ -113,23 +124,23 @@ function transformSportbexLiveMatch(match: any): ExternalMatch {
   
   if (hScore !== undefined && aScore !== undefined) {
     scoreText = `${homeName} ${hScore}/${hWickets || 0} (${hOvers || '0.0'}) vs ${awayName} ${aScore}/${aWickets || 0} (${aOvers || '0.0'})`;
-  } else if (match.current_score) {
-    scoreText = match.current_score;
+  } else if (match.current_score || match.score) {
+    scoreText = match.current_score || match.score;
   }
 
   return {
     id: match.id?.toString() || Math.random().toString(),
-    name: `${homeName} v ${awayName}`,
+    name: fullName || `${homeName} v ${awayName}`,
     matchType: 'cricket',
     status: match.status === 'finished' ? 'finished' : 'live',
     venue: match.venue_name || match.venue || 'Global Stadium',
-    date: match.match_date || match.date || new Date().toISOString(),
-    series: match.competition_name || match.series_name || 'International Series',
-    seriesId: (match.competition_id || match.series_id)?.toString(),
+    date: match.match_date || match.date || match.start_date || new Date().toISOString(),
+    series: match.competition_name || match.series_name || match.league_name || 'International Series',
+    seriesId: (match.competition_id || match.series_id || match.league_id)?.toString(),
     teams: [homeName, awayName],
     score: scoreText,
     matchStarted: true,
     matchEnded: match.status === 'finished',
-    rawStatusText: match.match_status_text || match.status_text || 'In Play'
+    rawStatusText: match.match_status_text || match.status_text || match.status || 'In Play'
   };
 }
