@@ -17,7 +17,7 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
   const [loading, setLoading] = useState(false);
   const firestore = useFirestore();
 
-  const handlePlaceBet = async (market: any, selection: any) => {
+  const handlePlaceBet = async (market: any, selection: any, isLay: boolean = false) => {
     if (!firestore || !userId || userId === 'guest') {
       toast({ title: 'Access Denied', description: 'Please login to place your stakes.', variant: 'destructive' });
       return;
@@ -25,18 +25,20 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
 
     setLoading(true);
     const stakeVal = parseFloat(stake);
+    const odds = isLay ? (selection.layOdds || selection.odds + 0.02) : selection.odds;
     
     const betData = {
       userId,
       matchId: match.id,
       selectionId: selection.id,
       marketId: market.id,
-      matchInfo: `${match.teamA} vs ${match.teamB}`,
-      selectionName: selection.name,
+      matchInfo: match.name || `${match.teams[0]} v ${match.teams[1]}`,
+      selectionName: `${selection.name}${isLay ? ' (LAY)' : ''}`,
       stake: stakeVal,
-      odds: selection.odds,
-      potentialWin: stakeVal * selection.odds,
-      betType: market.type === 'next_ball' ? 'live_micro' : 'pre_match'
+      odds: odds,
+      potentialWin: isLay ? stakeVal : (stakeVal * (odds - 1)),
+      type: isLay ? 'lay' : 'back',
+      createdAt: new Date().toISOString()
     };
 
     const result = await placeBetAction(firestore, userId, betData);
@@ -45,7 +47,7 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
     if (result.error) {
       toast({ title: 'Terminal Error', description: result.error, variant: 'destructive' });
     } else {
-      toast({ title: 'Stake Accepted', description: `Position opened on ${selection.name} at ${selection.odds}` });
+      toast({ title: 'Stake Accepted', description: `Position opened on ${selection.name} at ${odds}` });
     }
   };
 
@@ -84,7 +86,7 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
         <div className="bg-[#2c3e50] p-1 rounded-sm mb-3">
           <TabsList className="grid grid-cols-2 w-full bg-transparent p-0 h-8 gap-1">
             <TabsTrigger value="match_winner" className="rounded-sm font-black text-[10px] uppercase h-full data-[state=active]:bg-primary data-[state=active]:text-white bg-white/5 text-white/50 border-none">
-              <Trophy className="w-3 h-3 mr-2" /> Match Markets
+              <Trophy className="w-3 h-3 mr-2" /> Match Odds
             </TabsTrigger>
             <TabsTrigger value="next_ball" disabled={match.status !== 'live'} className="rounded-sm font-black text-[10px] uppercase h-full data-[state=active]:bg-accent data-[state=active]:text-white bg-white/5 text-white/50 border-none">
               <Zap className="w-3 h-3 mr-2" /> Fancy / Live
@@ -95,10 +97,10 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
         <TabsContent value="match_winner" className="space-y-2 mt-0">
           <div className="bg-white border border-slate-200 rounded-sm overflow-hidden">
             <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
-               <span className="text-[10px] font-black uppercase text-slate-500">Match Winner (Back / Lay)</span>
-               <div className="flex gap-1 text-[10px] font-bold text-slate-400">
-                  <span className="w-10 text-center">Back</span>
-                  <span className="w-10 text-center">Lay</span>
+               <span className="text-[10px] font-black uppercase text-slate-500">Winner Market (Betfair Pulse)</span>
+               <div className="flex gap-1 text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                  <span className="w-12 text-center text-blue-500">Back</span>
+                  <span className="w-12 text-center text-pink-500">Lay</span>
                </div>
             </div>
             
@@ -109,22 +111,23 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
                     <div className="flex flex-col">
                       <span className="font-black italic uppercase text-slate-800 tracking-tighter">{selection.name}</span>
                       <span className="text-[9px] text-slate-400 font-bold uppercase">
-                        Potential Win: <span className="text-primary">{(stakeNum * selection.odds).toFixed(0)}</span>
+                        Liability: <span className="text-destructive">{(stakeNum).toFixed(0)}</span>
                       </span>
                     </div>
                     <div className="flex gap-1">
                        <button 
-                         onClick={() => handlePlaceBet(market, selection)}
+                         onClick={() => handlePlaceBet(market, selection, false)}
                          className="w-12 h-10 bg-[#72bbef] flex flex-col items-center justify-center rounded-sm hover:brightness-95 transition-all"
                        >
                           <span className="text-xs font-black text-blue-900">{selection.odds.toFixed(2)}</span>
-                          <span className="text-[8px] text-blue-900/50 font-bold">0</span>
+                          <span className="text-[8px] text-blue-900/50 font-bold uppercase">Back</span>
                        </button>
                        <button 
-                         className="w-12 h-10 bg-[#faa9ba] flex flex-col items-center justify-center rounded-sm opacity-50 cursor-not-allowed"
+                         onClick={() => handlePlaceBet(market, selection, true)}
+                         className="w-12 h-10 bg-[#faa9ba] flex flex-col items-center justify-center rounded-sm hover:brightness-95 transition-all"
                        >
-                          <span className="text-xs font-black text-pink-900">{(selection.odds + 0.1).toFixed(2)}</span>
-                          <span className="text-[8px] text-pink-900/50 font-bold">0</span>
+                          <span className="text-xs font-black text-pink-900">{(selection.layOdds || selection.odds + 0.02).toFixed(2)}</span>
+                          <span className="text-[8px] text-pink-900/50 font-bold uppercase">Lay</span>
                        </button>
                     </div>
                   </div>
@@ -144,31 +147,27 @@ export function BettingPanel({ match, userId }: { match: any, userId: string }) 
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/5">
-              {match.markets?.filter((m: any) => m.type === 'next_ball').map((market: any) => (
-                market.selections.map((selection: any) => (
-                  <div key={selection.id} className="bg-slate-900 p-4 flex justify-between items-center group">
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-black text-white uppercase tracking-wider">{selection.name}</span>
-                      <p className="text-[9px] text-white/30 font-bold">Instantly settled</p>
-                    </div>
-                    <button 
-                      onClick={() => handlePlaceBet(market, selection)}
-                      className="bg-accent hover:bg-accent/90 text-white px-6 py-2 rounded-sm font-black text-[11px] uppercase italic tracking-tighter"
-                    >
-                      x{selection.odds.toFixed(2)}
-                    </button>
+              {/* Simulated Fancy Markets for Terminal Demo */}
+              {[
+                { name: 'Next Over Runs', odds: 1.90 },
+                { name: 'Powerplay Score', odds: 1.85 },
+                { name: 'Next Wicket Over', odds: 3.50 },
+                { name: 'Boundary Next Ball', odds: 4.00 }
+              ].map((fancy, idx) => (
+                <div key={idx} className="bg-slate-900 p-4 flex justify-between items-center group">
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-black text-white uppercase tracking-wider">{fancy.name}</span>
+                    <p className="text-[9px] text-white/30 font-bold">Instantly settled</p>
                   </div>
-                ))
+                  <button 
+                    onClick={() => handlePlaceBet({id: 'fancy', type: 'fancy'}, {id: `f-${idx}`, name: fancy.name, odds: fancy.odds})}
+                    className="bg-accent hover:bg-accent/90 text-white px-6 py-2 rounded-sm font-black text-[11px] uppercase italic tracking-tighter"
+                  >
+                    x{fancy.odds.toFixed(2)}
+                  </button>
+                </div>
               ))}
             </div>
-          </div>
-          
-          <div className="bg-yellow-400/10 border border-yellow-400/20 p-3 rounded-sm flex items-start gap-3">
-             <Info size={14} className="text-yellow-400 shrink-0 mt-0.5" />
-             <p className="text-[10px] text-yellow-400/80 font-bold uppercase leading-relaxed">
-               Instant markets settle upon the next ball event update from the actual web data source. 
-               Markets may suspend at any time.
-             </p>
           </div>
         </TabsContent>
       </Tabs>

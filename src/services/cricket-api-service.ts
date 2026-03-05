@@ -71,7 +71,7 @@ async function fetchFromSportbex(endpoint: string, method: 'GET' | 'POST' = 'GET
 }
 
 /**
- * Betfair Discovery: Fetches active Cricket competitions (Sport ID: 4).
+ * Betfair Discovery Phase 1: Fetches active Cricket competitions (Sport ID: 4).
  */
 export async function fetchBetfairCompetitions() {
   const json = await fetchFromSportbex(`betfair/4`);
@@ -79,7 +79,7 @@ export async function fetchBetfairCompetitions() {
 }
 
 /**
- * Betfair Discovery: Fetches events for a specific competition.
+ * Betfair Discovery Phase 2: Fetches events for a specific competition.
  */
 export async function fetchBetfairEvents(competitionId: string) {
   const json = await fetchFromSportbex(`betfair/event/4/${competitionId}`);
@@ -87,7 +87,7 @@ export async function fetchBetfairEvents(competitionId: string) {
 }
 
 /**
- * Betfair Discovery: Fetches markets for a specific event.
+ * Betfair Discovery Phase 3: Fetches markets for a specific event.
  */
 export async function fetchBetfairMarkets(eventId: string) {
   const json = await fetchFromSportbex(`betfair/markets/4/${eventId}`);
@@ -95,7 +95,7 @@ export async function fetchBetfairMarkets(eventId: string) {
 }
 
 /**
- * Betfair Pulse: Fetches the market book (odds) for specific market IDs.
+ * Betfair Final Pulse: Fetches the market book (prices) for specific market IDs.
  */
 export async function fetchMarketBook(marketId: string) {
   const json = await fetchFromSportbex(`betfair/listMarketBook/4`, 'POST', { marketIds: marketId });
@@ -109,6 +109,7 @@ export async function fetchLiveMatches(): Promise<ExternalMatch[]> {
   try {
     const json = await fetchFromSportbex(`live-score/match/live`);
     if (!json || !json.data) return [];
+    // Handle both array and object response variations
     const matchesArray = Array.isArray(json.data) ? json.data : (json.data?.matches || []);
     return matchesArray.map((match: any) => transformSportbexLiveMatch(match));
   } catch (e) {
@@ -153,14 +154,15 @@ export async function fetchLiveSeries(): Promise<ExternalSeries[]> {
 
 /**
  * Transforms Sportbex Live Match schema into Terminal Match schema.
+ * Now handles the t1/t2 structure provided in your JSON example.
  */
 function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMatch {
   const teamsData = match.teams || {};
   const t1 = teamsData.t1 || {};
   const t2 = teamsData.t2 || {};
 
-  const homeName = t1.name || match.home_team_name || 'TBA';
-  const awayName = t2.name || match.away_team_name || 'TBA';
+  const homeName = t1.name || match.home_team_name || match.teamA || 'TBA';
+  const awayName = t2.name || match.away_team_name || match.teamB || 'TBA';
   
   let scoreText = '';
   if (t1.score && t2.score) {
@@ -172,8 +174,11 @@ function transformSportbexLiveMatch(match: any, originalId?: string): ExternalMa
   const isCompleted = match.status === 'COMPLETED' || match.status === 'finished';
   const isLive = match.isLive === true || match.status === 'LIVE' || match.status === 'In Play';
 
+  // Sanitize IDs: Decode URI and replace spaces with hyphens for clean Firestore Doc IDs and URLs
   let finalId = originalId || match.id?.toString();
-  if (finalId) finalId = finalId.replace(/\s+/g, '-');
+  if (finalId) {
+    finalId = decodeURIComponent(finalId).replace(/\s+/g, '-');
+  }
 
   return {
     id: finalId || Math.random().toString(36).substr(2, 9),

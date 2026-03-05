@@ -9,13 +9,12 @@ export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
   const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
   
-  // Use odds from the match object populated by sync-matches
+  // Use professional odds from the enriched Betfair sync
   const homeBack = match.odds?.home?.back || 1.90;
   const homeLay = match.odds?.home?.lay || 1.92;
   const awayBack = match.odds?.away?.back || 1.90;
   const awayLay = match.odds?.away?.lay || 1.92;
 
-  // Track relative time since last update
   const [lastUpdateText, setLastUpdateText] = useState('');
 
   useEffect(() => {
@@ -31,8 +30,8 @@ export function MatchRow({ match }: { match: any }) {
     <div className="match-row group">
       <div className="flex-1 flex flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <Link href={`/match/${match.id}`} className="font-bold text-slate-800 hover:text-primary transition-colors cursor-pointer">
-            {match.teamA} v {match.teamB}
+          <Link href={`/match/${encodeURIComponent(match.id)}`} className="font-bold text-slate-800 hover:text-primary transition-colors cursor-pointer">
+            {match.teams?.[0] || 'TBA'} v {match.teams?.[1] || 'TBA'}
           </Link>
           <span className="text-[10px] text-slate-400">/ {format(matchDate, 'dd/MM/yyyy HH:mm')}</span>
           {isLive && (
@@ -53,15 +52,15 @@ export function MatchRow({ match }: { match: any }) {
           )}
           {match.lastUpdated && (
             <div className="flex items-center gap-1 text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
-              <Clock size={10} /> {lastUpdateText || 'Just now'}
+              <Clock size={10} /> {lastUpdateText || 'Updated'}
             </div>
           )}
         </div>
       </div>
 
       <div className="w-[180px] flex justify-around">
-        {/* Home Team Odds */}
-        <Link href={`/match/${match.id}`} className="flex gap-0.5">
+        {/* Home Team Betfair Pulse */}
+        <Link href={`/match/${encodeURIComponent(match.id)}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
             <span>{homeBack.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
@@ -72,7 +71,7 @@ export function MatchRow({ match }: { match: any }) {
           </div>
         </Link>
         
-        <div className="flex gap-0.5 opacity-30">
+        <div className="flex gap-0.5 opacity-30 hidden md:flex">
           <div className="odds-box bg-slate-100">
             <span>-</span>
           </div>
@@ -81,8 +80,8 @@ export function MatchRow({ match }: { match: any }) {
           </div>
         </div>
 
-        {/* Away Team Odds */}
-        <Link href={`/match/${match.id}`} className="flex gap-0.5">
+        {/* Away Team Betfair Pulse */}
+        <Link href={`/match/${encodeURIComponent(match.id)}`} className="flex gap-0.5">
           <div className="odds-box odds-blue">
             <span>{awayBack.toFixed(2)}</span>
             <span className="text-[8px] opacity-70">0</span>
