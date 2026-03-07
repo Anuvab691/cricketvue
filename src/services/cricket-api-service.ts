@@ -32,7 +32,7 @@ export interface ExternalMatch {
 }
 
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
-const DEFAULT_TIMEOUT = 10000;
+const DEFAULT_TIMEOUT = 12000;
 
 /**
  * fetchWithHeaders() - Robust fetch helper with timeout and retry logic.
@@ -40,8 +40,8 @@ const DEFAULT_TIMEOUT = 10000;
 async function fetchWithHeaders(endpoint: string, params: Record<string, string> = {}, retries = 3) {
   const apiKey = process.env.SPORTBEX_API_KEY;
   if (!apiKey) {
-    console.error("[Sportbex] CRITICAL: API Key missing in environment.");
-    throw new Error("SPORTBEX_API_KEY is missing. Please configure it in your environment.");
+    console.error("[Sportbex] CRITICAL: SPORTBEX_API_KEY is missing in environment.");
+    throw new Error("SPORTBEX_API_KEY is missing. Check your Firebase/Local env settings.");
   }
 
   const queryParams = new URLSearchParams(params);
@@ -53,7 +53,7 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
     try {
-      console.log(`[Sportbex] Requesting: ${endpoint} (Attempt ${i + 1})`);
+      console.log(`[Sportbex] Syncing endpoint: ${endpoint} (Attempt ${i + 1})`);
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
@@ -68,11 +68,13 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
 
       if (!response.ok) {
         if (response.status === 429) {
-          console.warn("[Sportbex] Rate limited. Retrying...");
+          console.warn("[Sportbex] Rate limited. Waiting...");
           await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
           continue;
         }
-        console.error(`[Sportbex] API Error: ${response.status} at ${endpoint}`);
+        console.error(`[Sportbex] API HTTP Error: ${response.status} at ${endpoint}`);
+        const errText = await response.text();
+        console.error(`[Sportbex] Response Body:`, errText);
         throw new Error(`Sportbex API Error: ${response.status}`);
       }
 
@@ -84,7 +86,7 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
         console.error(`[Sportbex] Final fetch failure for ${endpoint}:`, error.message);
         throw error;
       }
-      await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 }
@@ -94,21 +96,34 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
  */
 function normalizeLiveMatch(match: any): ExternalMatch | null {
   // Defensive mapping for team names
-  const teamA = match.t1_name || match.home_team_name;
-  const teamB = match.t2_name || match.away_team_name;
+  const teamA = match.t1_name || match.home_team_name || match.team_a;
+  const teamB = match.t2_name || match.away_team_name || match.team_b;
 
-  if (!teamA || !teamB) return null;
+  if (!teamA || !teamB) {
+    console.warn("[Sportbex] Skipping match with incomplete team data", match.id);
+    return null;
+  }
 
   // Stable ID generation
   const matchId = match.id?.toString() || 
     `${teamA}-${teamB}-${match.startDate || match.date || Date.now()}`.replace(/\s+/g, '-').toLowerCase();
 
-  // Status normalization
+  // Status normalization (Cricket specific variations)
   const rawStatus = (match.status || match.match_status || '').toUpperCase();
   let status: 'upcoming' | 'live' | 'finished' = 'upcoming';
-  if (['LIVE', 'INPLAY', 'IN_PROGRESS', '1ST INNINGS', '2ND INNINGS', 'BAT'].includes(rawStatus)) {
+  
+  const liveTriggers = [
+    'LIVE', 'INPLAY', 'IN_PROGRESS', '1ST INNINGS', '2ND INNINGS', 
+    'BAT', 'TOSS', 'START', 'STR', 'PLAYING'
+  ];
+  
+  const finishedTriggers = [
+    'COMPLETED', 'FINISHED', 'RESULT', 'ABANDONED', 'CANCL', 'POSTP', 'DRAW'
+  ];
+
+  if (liveTriggers.some(t => rawStatus.includes(t))) {
     status = 'live';
-  } else if (['COMPLETED', 'FINISHED', 'RESULT', 'ABANDONED'].includes(rawStatus)) {
+  } else if (finishedTriggers.some(t => rawStatus.includes(t))) {
     status = 'finished';
   }
 
@@ -119,21 +134,21 @@ function normalizeLiveMatch(match: any): ExternalMatch | null {
     name: match.name || `${teamA} v ${teamB}`,
     matchType: match.matchType || match.type || 'cricket',
     status,
-    venue: match.ground || match.venue || 'Global Stadium',
+    venue: match.ground || match.venue || 'International Venue',
     startTime: match.startDate || match.date || new Date().toISOString(),
     teamA,
     teamB,
     score: scoreText,
     currentScore: scoreText,
-    statusText: match.result?.message || match.status_text || match.status || 'Match in Progress',
+    statusText: match.result?.message || match.status_text || match.status || 'Match Active',
     lastUpdated: new Date().toISOString(),
     series: match.series_name || match.series || 'Live Series',
-    // Simulated professional odds for the exchange interface
+    // Simulated professional odds for the exchange interface (mapped to SGO-style markets)
     odds: {
       status: 'OPEN',
-      home: { back: [{ price: 1.91, size: 500 }], lay: [{ price: 1.95, size: 200 }] },
-      away: { back: [{ price: 1.91, size: 500 }], lay: [{ price: 1.95, size: 200 }] },
-      draw: { back: [{ price: 3.50, size: 100 }], lay: [{ price: 3.65, size: 50 }] }
+      home: { back: [{ price: 1.90, size: 500 }], lay: [{ price: 1.94, size: 200 }] },
+      away: { back: [{ price: 1.90, size: 500 }], lay: [{ price: 1.94, size: 200 }] },
+      draw: { back: [{ price: 3.50, size: 100 }], lay: [{ price: 3.70, size: 50 }] }
     }
   };
 }
@@ -144,39 +159,39 @@ function normalizeLiveMatch(match: any): ExternalMatch | null {
 export async function fetchLiveMatches(): Promise<any[]> {
   try {
     const json = await fetchWithHeaders('live-score/match/live');
-    // Sportbex returns matches in data.matches or sometimes directly in data
-    return json?.data?.matches || json?.data || [];
+    // Sportbex trial-api structure handling
+    if (json?.data?.matches) return json.data.matches;
+    if (json?.data && Array.isArray(json.data)) return json.data;
+    if (json?.matches && Array.isArray(json.matches)) return json.matches;
+    
+    return [];
   } catch (error) {
-    console.error("[Sportbex] Live fetch error:", error);
+    console.error("[Sportbex] API Fetch Exception:", error);
     return [];
   }
-}
-
-/**
- * getLiveMatches() - Returns normalized matches for the UI.
- */
-export async function getLiveMatches(): Promise<ExternalMatch[]> {
-  const matches = await fetchLiveMatches();
-  return matches
-    .map(normalizeLiveMatch)
-    .filter((m): m is ExternalMatch => m !== null);
 }
 
 /**
  * syncSportbexData() - Master orchestrator for the terminal sync action.
  */
 export async function syncSportbexData() {
-  console.log("[Sportbex] Starting Live Network Sync...");
-  const liveMatches = await getLiveMatches();
-  console.log(`[Sportbex] Found ${liveMatches.length} active live matches.`);
+  console.log("[Sportbex] Initiating Global Network Sync...");
+  const rawMatches = await fetchLiveMatches();
+  
+  if (!rawMatches || rawMatches.length === 0) {
+    console.log("[Sportbex] No live matches returned from the pulse.");
+    return { fixtures: [] };
+  }
+
+  const liveMatches = rawMatches
+    .map(normalizeLiveMatch)
+    .filter((m): m is ExternalMatch => m !== null);
+
+  console.log(`[Sportbex] Successfully ingested ${liveMatches.length} matches.`);
   return { fixtures: liveMatches };
 }
 
-export async function fetchLiveScores() {
-  return getLiveMatches();
-}
-
 export async function fetchPremiumFancy(eventId: string) {
-  // Placeholder for future premium fancy markets integration
+  // Placeholder for high-liquidity fancy markets
   return [];
 }
