@@ -5,7 +5,6 @@ import {
   getCompetitions,
   getEventsByCompetition,
   fetchMarketOdds,
-  fetchFancyOdds,
   fetchLiveScores
 } from '@/services/cricket-api-service';
 
@@ -51,21 +50,11 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
       if (betfairEvent) {
         // Find market odds for the linked event
-        const marketOddsResult = await fetchMarketOdds(betfairEvent.id); // Assuming eventId can act as primary market ID or similar fallback
-        
+        // TODO: In a real flow, we'd find the match odds market ID here
+        // For now, we enrich with the event metadata
         matchEnrichment = {
           betfairEventId: betfairEvent.id,
-          odds: marketOddsResult ? {
-            status: marketOddsResult.status,
-            home: { 
-              back: marketOddsResult.runners[0]?.back?.[0]?.price || 1.00, 
-              lay: marketOddsResult.runners[0]?.lay?.[0]?.price || 0.00 
-            },
-            away: { 
-              back: marketOddsResult.runners[1]?.back?.[0]?.price || 1.00, 
-              lay: marketOddsResult.runners[1]?.lay?.[0]?.price || 0.00 
-            },
-          } : null
+          series: betfairEvent.series || matchedMatch.series
         };
       }
 
