@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -6,6 +7,7 @@ import { doc, collection } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { BettingPanel } from '@/components/betting/BettingPanel';
 import { AiInsightBox } from '@/components/betting/AiInsightBox';
+import { MatchExposure } from '@/components/admin/MatchExposure';
 import { Loader2, UserCircle, Zap, ShieldCheck, ChevronLeft, Database, Globe, Info } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { format, parseISO } from 'date-fns';
@@ -215,6 +217,10 @@ export default function MatchPage() {
           </div>
           
           <div className="space-y-3">
+            {userData?.role === 'admin' && (
+              <MatchExposure matchId={match.id} />
+            )}
+            
             <AiInsightBox teamA={match.teamA} teamB={match.teamB} status={match.status} />
             
             <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-4">
