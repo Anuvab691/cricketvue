@@ -4,7 +4,7 @@ import { useFirestore, useUser, useDoc, useCollection, useAuth } from '@/firebas
 import { doc, collection } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { 
-  UserCircle, Loader2, Search, Download, HelpCircle
+  UserCircle, Loader2, Search, Download, HelpCircle, Trophy, ChevronDown 
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { useState } from 'react';
@@ -69,8 +69,8 @@ export default function Dashboard() {
             
             <div className="flex flex-col items-end text-white leading-tight">
               <div className="text-[11px] font-bold flex gap-2">
-                <span>Balance: <span className="text-yellow-400 font-black">{userData?.tokenBalance?.toFixed(1) || '0.0'}</span></span>
-                <span>Exp: <span className="text-yellow-400 font-black">0</span></span>
+                <span>Balance: <span className="text-white font-black">{userData?.tokenBalance?.toFixed(1) || '0.0'}</span></span>
+                <span>Exp: <span className="text-white font-black">0</span></span>
               </div>
               <div className="text-[11px] font-bold flex items-center gap-1 cursor-pointer" onClick={handleLogout}>
                 <span>{userData?.username || 'User'}</span>
@@ -158,5 +158,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-import { Trophy, ChevronDown } from 'lucide-react';

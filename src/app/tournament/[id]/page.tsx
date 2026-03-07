@@ -79,7 +79,7 @@ export default function TournamentOutrightPage() {
             <Link href="/"><h1 className="text-2xl font-black italic tracking-tighter">CRICKETVUE</h1></Link>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-xs font-bold">Balance: <span className="text-yellow-400">{(userData?.tokenBalance || 0).toLocaleString()}</span></div>
+            <div className="text-xs font-bold">Balance: <span className="text-white">{(userData?.tokenBalance || 0).toLocaleString()}</span></div>
             <div className="text-[10px] opacity-70 flex items-center gap-1"><UserCircle size={16} /> {userData?.username || 'Guest'}</div>
           </div>
         </header>
