@@ -1,42 +1,35 @@
 'use client';
 
 import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
-import { syncSportsMonkData } from '@/services/cricket-api-service';
+import { syncSportbexData } from '@/services/cricket-api-service';
 
 /**
- * SportsMonk Data Ingestion: Fetches fixtures and updates terminal state.
+ * Sportbex Data Ingestion: Fetches live matches and updates terminal state.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    // 1. Fetch live data from SportsMonk v3
-    const { leagues, fixtures } = await syncSportsMonkData();
+    // 1. Fetch live data from Sportbex
+    const { fixtures } = await syncSportbexData();
     const activeMatchIds = new Set<string>();
 
     const batch = writeBatch(db);
 
-    // 2. Process Leagues (Tournaments)
-    for (const league of leagues) {
-      const leagueRef = doc(db, 'tournaments', league.id);
-      batch.set(leagueRef, {
-        ...league,
-        lastUpdated: new Date().toISOString()
-      }, { merge: true });
-    }
-
-    // 3. Process Fixtures (Matches)
+    // 2. Process Fixtures (Matches)
     for (const match of fixtures) {
       activeMatchIds.add(match.id);
       const matchRef = doc(db, 'matches', match.id);
+      
+      // Upsert fixture data
       batch.set(matchRef, {
         ...match,
         lastUpdated: new Date().toISOString()
       }, { merge: true });
 
-      // If odds data is nested but needs separate market storage for scalability
-      // Option: fixtures/{matchId}/markets/{marketId}
+      // Create a default market if odds exist in our normalized object
       if (match.odds) {
         const marketRef = doc(db, 'matches', match.id, 'markets', 'moneyline');
         batch.set(marketRef, {
+          id: 'moneyline',
           type: 'match_winner',
           status: match.odds.status,
           selections: [
@@ -50,7 +43,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     await batch.commit();
 
-    // 4. Pruning: Remove matches no longer in the live feed
+    // 3. Pruning: Remove matches no longer in the live feed (optional, depends on use-case)
+    // For now, we only keep live matches in the terminal dashboard
     const existingSnap = await getDocs(collection(db, 'matches'));
     const pruneBatch = writeBatch(db);
     let prunedCount = 0;
@@ -70,10 +64,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
       success: true, 
       count: activeMatchIds.size, 
       pruned: prunedCount,
-      tournamentsCount: leagues.length
+      tournamentsCount: 0 // Sportbex live endpoint doesn't return separate league objects
     };
   } catch (error: any) {
-    console.error("SportsMonk Sync Failure:", error);
+    console.error("Sportbex Sync Failure:", error);
     return { success: false, error: error.message };
   }
 }
