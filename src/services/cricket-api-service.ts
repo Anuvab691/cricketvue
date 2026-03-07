@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -27,7 +26,7 @@ const SGO_BASE_URL = "https://api.sportsgameodds.com/v2/";
 
 /**
  * Converts American odds (e.g., -110, +150) to Decimal odds (e.g., 1.91, 2.50).
- * This is required because SGO v2 provides American odds, but the terminal uses Decimal format.
+ * SGO v2 provides American odds, but the terminal uses Decimal format.
  */
 function americanToDecimal(american: string | number | undefined): number {
   if (american === undefined) return 2.0;
@@ -42,19 +41,17 @@ function americanToDecimal(american: string | number | undefined): number {
 }
 
 /**
- * Robust fetch helper with SGO v2 authentication and timeout.
+ * Robust fetch helper with SGO v2 authentication.
  */
 async function fetchSgo(endpoint: string, params: Record<string, string> = {}) {
   const apiKey = process.env.SGO_API_KEY;
   if (!apiKey) {
-    throw new Error("SGO_API_KEY is missing from environment variables.");
+    console.error("SGO_API_KEY is missing from environment variables.");
+    return null;
   }
 
   const queryParams = new URLSearchParams({ ...params, apiKey });
   const url = `${SGO_BASE_URL}${endpoint.replace(/^\//, '')}?${queryParams.toString()}`;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
     const response = await fetch(url, {
@@ -62,22 +59,17 @@ async function fetchSgo(endpoint: string, params: Record<string, string> = {}) {
       cache: 'no-store',
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      signal: controller.signal
+      }
     });
 
-    clearTimeout(timeoutId);
-
     if (!response.ok) {
-      console.error(`SGO v2 Fetch Error: ${response.status} ${response.statusText} at ${endpoint}`);
+      console.error(`SGO v2 Fetch Error: ${response.status} at ${endpoint}`);
       return null;
     }
 
     return await response.json();
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    console.error(`SGO v2 Failure [${endpoint}]:`, error.name === 'AbortError' ? 'Timeout' : error.message);
+  } catch (error) {
+    console.error(`SGO v2 Network Failure [${endpoint}]:`, error);
     return null;
   }
 }
@@ -101,23 +93,35 @@ export async function fetchSgoCricketEvents(): Promise<ExternalMatch[]> {
     limit: '20'
   });
 
-  if (!json || !json.data) return [];
+  if (!json || !json.data) {
+    console.warn("No data returned from SGO v2 events endpoint.");
+    return [];
+  }
 
   return json.data.map((event: any) => {
     const homeTeam = event.teams?.home?.name || event.teams?.home?.teamID || 'TBA';
     const awayTeam = event.teams?.away?.name || event.teams?.away?.teamID || 'TBA';
     
-    // SGO v2 OddID format for Match Winner (Moneyline)
-    const homeOddId = 'points-all-game-ml-home';
-    const awayOddId = 'points-all-game-ml-away';
+    // SGO v2 Moneyline OddID patterns
+    // Format: {statID}-{statEntityID}-{periodID}-{betTypeID}-{sideID}
+    const homeMLPath = 'points-home-game-ml-home';
+    const awayMLPath = 'points-away-game-ml-away';
+    const fallbackHomeMLPath = 'points-all-game-ml-home';
+    const fallbackAwayMLPath = 'points-all-game-ml-away';
 
-    // Extract American odds from a common bookmaker (e.g., Pinnacle or DraftKings)
-    const homeAmOdds = event.odds?.[homeOddId]?.byBookmaker?.pinnacle?.odds || 
-                       event.odds?.[homeOddId]?.byBookmaker?.draftkings?.odds;
-    const awayAmOdds = event.odds?.[awayOddId]?.byBookmaker?.pinnacle?.odds || 
-                       event.odds?.[awayOddId]?.byBookmaker?.draftkings?.odds;
+    const getPrice = (oddID: string, altID: string) => {
+      const odd = event.odds?.[oddID] || event.odds?.[altID];
+      if (!odd) return undefined;
+      
+      // Prefer Pinnacle for professional sharp lines, fallback to DraftKings or first available
+      const bookmakers = odd.byBookmaker || {};
+      const bookie = bookmakers.pinnacle || bookmakers.draftkings || Object.values(bookmakers)[0];
+      return (bookie as any)?.odds;
+    };
 
-    // Convert to Decimal for the Exchange UI
+    const homeAmOdds = getPrice(homeMLPath, fallbackHomeMLPath);
+    const awayAmOdds = getPrice(awayMLPath, fallbackAwayMLPath);
+
     const homeDec = americanToDecimal(homeAmOdds);
     const awayDec = americanToDecimal(awayAmOdds);
 
@@ -149,17 +153,14 @@ export async function fetchSgoCricketEvents(): Promise<ExternalMatch[]> {
 }
 
 /**
- * Legacy wrapper for compatibility.
+ * Legacy compatibility wrappers.
  */
 export async function fetchLiveScores(): Promise<ExternalMatch[]> {
   return fetchSgoCricketEvents();
 }
 
-/**
- * Placeholder for Premium Fancy odds if supported by provider in future.
- */
-export async function fetchPremiumFancy(eventId: string) {
-  // SGO v2 provides props in the main events endpoint or via player props endpoints.
-  // For now, return empty to signify market suspended.
+export async function fetchPremiumFancy(eventId: string): Promise<any[]> {
+  // SGO v2 provides detailed props in the main events endpoint.
+  // For now, return empty to signify high-liquidity micro-markets suspended.
   return [];
 }
