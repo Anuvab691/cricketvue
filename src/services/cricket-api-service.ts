@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * @fileOverview Professional Service for Sportbex API.
+ * @fileOverview Professional Service for SportsGameOdds (SGO) API.
  * Implements the full hierarchy: Competitions -> Events -> Markets -> Odds.
  */
 
@@ -43,19 +43,19 @@ export interface ExternalMarket {
   eventId: string;
 }
 
-const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
-const API_KEY = process.env.SPORTBEX_API_KEY;
+const SGO_BASE_URL = "https://api.sportsgameodds.com/api/";
+const API_KEY = process.env.SGO_API_KEY;
 
 if (!API_KEY) {
-  console.warn("CRITICAL ERROR: SPORTBEX_API_KEY is not defined in the environment variables.");
+  console.warn("CRITICAL ERROR: SGO_API_KEY is not defined in the environment variables.");
 }
 
 async function fetchWithHeaders(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: any, retries: number = 3) {
   if (!API_KEY) {
-    throw new Error("SPORTBEX_API_KEY missing. Check your environment configuration.");
+    throw new Error("SGO_API_KEY missing. Check your environment configuration.");
   }
 
-  const url = `${SPORTBEX_BASE_URL}${endpoint.replace(/^\//, '')}`;
+  const url = `${SGO_BASE_URL}${endpoint.replace(/^\//, '')}`;
   const timeout = 8000;
 
   for (let i = 0; i < retries; i++) {
@@ -68,7 +68,7 @@ async function fetchWithHeaders(endpoint: string, method: 'GET' | 'POST' = 'GET'
         cache: 'no-store',
         signal: controller.signal,
         headers: {
-          'sportbex-api-key': API_KEY,
+          'sgo-api-key': API_KEY,
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         }
@@ -83,10 +83,14 @@ async function fetchWithHeaders(endpoint: string, method: 'GET' | 'POST' = 'GET'
         throw new Error(`API Error: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      const json = await response.json();
+      return json;
     } catch (error: any) {
       clearTimeout(timer);
-      if (i === retries - 1) return null;
+      if (i === retries - 1) {
+        console.error(`SGO API Final Failure [${endpoint}]:`, error.message);
+        return null;
+      }
       await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000));
     }
   }
@@ -178,27 +182,23 @@ export async function fetchMarketOdds(marketId: string) {
     marketIds: [marketId]
   });
   
-  const data = json?.data?.[0];
-  if (!data) return null;
+  const market = json?.data?.[0];
+  if (!market) return null;
+
+  console.log("SGO Market Pulse:", market.status, "inplay:", market.inplay, "totalMatched:", market.totalMatched);
 
   return {
-    marketId: data.marketId,
-    status: normalizeMarketStatus(data.status),
-    inplay: !!data.inplay,
-    totalMatched: data.totalMatched || 0,
-    runners: (data.runners || []).map((runner: any) => ({
+    marketId: market.marketId,
+    status: normalizeMarketStatus(market.status),
+    inplay: !!market.inplay,
+    totalMatched: market.totalMatched || 0,
+    runners: (market.runners || []).map((runner: any) => ({
       selectionId: runner.selectionId,
       runnerName: runner.runnerName || `Selection ${runner.selectionId}`,
       status: normalizeMarketStatus(runner.status),
       lastPriceTraded: runner.lastPriceTraded ?? null,
-      back: (runner.ex?.availableToBack || []).slice(0, 3).map((b: any) => ({
-        price: b.price || 0,
-        size: b.size || 0
-      })),
-      lay: (runner.ex?.availableToLay || []).slice(0, 3).map((l: any) => ({
-        price: l.price || 0,
-        size: l.size || 0
-      }))
+      back: runner.ex?.availableToBack?.slice(0, 3) ?? [],
+      lay: runner.ex?.availableToLay?.slice(0, 3) ?? []
     }))
   };
 }
@@ -217,13 +217,14 @@ export async function fetchLiveScores(): Promise<ExternalMatch[]> {
   const json = await fetchWithHeaders(`live-score/match/live`);
   if (!json || !json.data) return [];
   const matchesArray = json.data.matches || (Array.isArray(json.data) ? json.data : []);
-  return Promise.all(matchesArray.map((m: any) => transformLiveMatch(m)));
+  
+  const transformed = await Promise.all(matchesArray.map(async (m: any) => {
+    return await transformLiveMatch(m);
+  }));
+  
+  return transformed;
 }
 
-/**
- * Transforms raw live match data into a normalized format.
- * Server Actions (exported functions in 'use server' files) must be async.
- */
 export async function transformLiveMatch(match: any): Promise<ExternalMatch> {
   const home = match.t1_name || match.home_team_name || 'TBA';
   const away = match.t2_name || match.away_team_name || 'TBA';
@@ -247,7 +248,7 @@ export async function transformLiveMatch(match: any): Promise<ExternalMatch> {
   };
 }
 
-export async function syncSportbexHierarchy() {
+export async function syncSgoHierarchy() {
   const results: any[] = [];
   const competitions = await getCompetitions('4');
   const activeComps = competitions.slice(0, 5);
@@ -259,10 +260,10 @@ export async function syncSportbexHierarchy() {
       if (!event.betfairEventId) continue;
       
       const markets = await getMarketsByEvent(event.betfairEventId, '4');
-      const matchWinnerMarket = markets.find(m => 
-        m.name.toLowerCase().includes('match odds') || 
-        m.name.toLowerCase().includes('winner')
-      );
+      const matchWinnerMarket = markets.find(m => {
+        const name = (m.name || '').toLowerCase();
+        return name.includes('match odds') || name.includes('match winner') || name === 'winner';
+      });
 
       let odds = null;
       if (matchWinnerMarket) {

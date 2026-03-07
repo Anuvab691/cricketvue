@@ -4,12 +4,13 @@ import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebas
 import { 
   getCompetitions,
   getEventsByCompetition,
+  getMarketsByEvent,
   fetchMarketOdds,
   fetchLiveScores
 } from '@/services/cricket-api-service';
 
 /**
- * Master Ingestion Workflow: Implements the full professional hierarchy sync.
+ * Master Ingestion Workflow: Implements the full hierarchy sync via SportsGameOdds.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -22,52 +23,63 @@ export async function syncCricketMatchesAction(db: Firestore) {
       }, { merge: true });
     }
 
-    // 2. Fetch Hierarchy Layer 2: Live Scores (Base for Event UI)
+    // 2. Fetch Hierarchy Layer 2: Live Scores
     const liveMatches = await fetchLiveScores();
     const activeMatchIds = new Set<string>();
 
-    // Pre-fetch all Betfair events to link them
-    const allBetfairEvents: any[] = [];
-    for (const comp of competitions.slice(0, 10)) { // Limit competitions to avoid timeout
+    // Discovery Cache
+    const allEvents: any[] = [];
+    const limitedComps = competitions.slice(0, 8); // Performance cap
+
+    for (const comp of limitedComps) {
       const events = await getEventsByCompetition(comp.id, '4');
       if (events && Array.isArray(events)) {
-        allBetfairEvents.push(...events);
+        allEvents.push(...events);
       }
     }
 
-    // 3. Process each Live Match
+    // 3. Process and Link Data
     for (const matchedMatch of liveMatches) {
       activeMatchIds.add(matchedMatch.id);
-      let matchEnrichment = {};
+      let enrichment: any = {};
 
-      // Fuzzy match Betfair Event to our Live Match
-      const betfairEvent = allBetfairEvents.find(e => {
+      // Match Live Score to professional Betfair Event
+      const professionalEvent = allEvents.find(e => {
         const eName = (e.name || '').toLowerCase();
         const mHome = (matchedMatch.teamA || '').toLowerCase();
         const mAway = (matchedMatch.teamB || '').toLowerCase();
         return (eName.includes(mHome) && eName.includes(mAway));
       });
 
-      if (betfairEvent) {
-        // Find market odds for the linked event
-        // TODO: In a real flow, we'd find the match odds market ID here
-        // For now, we enrich with the event metadata
-        matchEnrichment = {
-          betfairEventId: betfairEvent.id,
-          series: betfairEvent.series || matchedMatch.series
-        };
+      if (professionalEvent) {
+        enrichment.betfairEventId = professionalEvent.id;
+        
+        // Find specific Match Odds market
+        const markets = await getMarketsByEvent(professionalEvent.id, '4');
+        const matchWinnerMarket = markets.find(m => {
+          const name = (m.name || '').toLowerCase();
+          return name.includes('match odds') || name.includes('match winner') || name === 'winner';
+        });
+
+        if (matchWinnerMarket) {
+          enrichment.betfairMarketId = matchWinnerMarket.id;
+          const liveOdds = await fetchMarketOdds(matchWinnerMarket.id);
+          if (liveOdds) {
+             enrichment.odds = liveOdds;
+          }
+        }
       }
 
-      // Save Match to Firestore (Always save, enriched if possible)
+      // Save to Firestore
       const matchRef = doc(db, 'matches', matchedMatch.id);
       await setDoc(matchRef, {
         ...matchedMatch,
-        ...matchEnrichment,
+        ...enrichment,
         lastUpdated: new Date().toISOString()
       }, { merge: true });
     }
 
-    // 4. Pruning: Remove stale matches
+    // 4. Pruning
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
@@ -79,9 +91,9 @@ export async function syncCricketMatchesAction(db: Firestore) {
     });
     if (pruned > 0) await batch.commit();
 
-    return { success: true, active: activeMatchIds.size, pruned };
+    return { success: true, count: activeMatchIds.size, pruned };
   } catch (error: any) {
-    console.error("Master Sync Failure:", error);
+    console.error("SGO Master Sync Failure:", error);
     return { success: false, error: error.message };
   }
 }
