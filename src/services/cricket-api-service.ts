@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Professional Service for SportsGameOdds (SGO) v2 API.
- * Implements the v2 discovery flow: /v2/events -> odds.
+ * This service implements the SGO v2 protocol for fetching live cricket events, scores, and odds.
  */
 
 export interface ExternalMatch {
@@ -17,10 +17,8 @@ export interface ExternalMatch {
   seriesId?: string;
   teamA: string;
   teamB: string;
-  score?: string;
   currentScore?: string;
   statusText?: string;
-  sgoEventId?: string;
   odds?: any;
   lastUpdated?: string;
 }
@@ -29,8 +27,10 @@ const SGO_BASE_URL = "https://api.sportsgameodds.com/v2/";
 
 /**
  * Converts American odds (e.g., -110, +150) to Decimal odds (e.g., 1.91, 2.50).
+ * This is required because SGO v2 provides American odds, but the terminal uses Decimal format.
  */
-function americanToDecimal(american: string | number): number {
+function americanToDecimal(american: string | number | undefined): number {
+  if (american === undefined) return 2.0;
   const num = typeof american === 'string' ? parseFloat(american) : american;
   if (isNaN(num)) return 2.0;
 
@@ -42,16 +42,19 @@ function americanToDecimal(american: string | number): number {
 }
 
 /**
- * Robust fetch helper with SGO v2 auth.
+ * Robust fetch helper with SGO v2 authentication and timeout.
  */
 async function fetchSgo(endpoint: string, params: Record<string, string> = {}) {
   const apiKey = process.env.SGO_API_KEY;
   if (!apiKey) {
-    throw new Error("SGO_API_KEY missing. Please configure your environment variables.");
+    throw new Error("SGO_API_KEY is missing from environment variables.");
   }
 
-  const query = new URLSearchParams({ ...params, apiKey }).toString();
-  const url = `${SGO_BASE_URL}${endpoint.replace(/^\//, '')}?${query}`;
+  const queryParams = new URLSearchParams({ ...params, apiKey });
+  const url = `${SGO_BASE_URL}${endpoint.replace(/^\//, '')}?${queryParams.toString()}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
     const response = await fetch(url, {
@@ -60,31 +63,36 @@ async function fetchSgo(endpoint: string, params: Record<string, string> = {}) {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
-      }
+      },
+      signal: controller.signal
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      throw new Error(`SGO v2 Error: ${response.status} ${response.statusText}`);
+      console.error(`SGO v2 Fetch Error: ${response.status} ${response.statusText} at ${endpoint}`);
+      return null;
     }
 
     return await response.json();
   } catch (error: any) {
-    console.error(`SGO v2 Failure [${endpoint}]:`, error.message);
+    clearTimeout(timeoutId);
+    console.error(`SGO v2 Failure [${endpoint}]:`, error.name === 'AbortError' ? 'Timeout' : error.message);
     return null;
   }
 }
 
 /**
- * Normalizes SGO status to CricketVue internal status.
+ * Normalizes SGO event status to CricketVue internal status.
  */
-function normalizeSgoStatus(sgoEvent: any): 'upcoming' | 'live' | 'finished' {
-  if (sgoEvent.status?.finalized || sgoEvent.status?.ended) return 'finished';
-  if (sgoEvent.status?.started) return 'live';
+function normalizeSgoStatus(event: any): 'upcoming' | 'live' | 'finished' {
+  if (event.status?.finalized || event.status?.ended) return 'finished';
+  if (event.status?.started) return 'live';
   return 'upcoming';
 }
 
 /**
- * Fetches all active Cricket events from SGO v2.
+ * Fetches all active Cricket events from SGO v2 with live odds.
  */
 export async function fetchSgoCricketEvents(): Promise<ExternalMatch[]> {
   const json = await fetchSgo('events', {
@@ -100,14 +108,14 @@ export async function fetchSgoCricketEvents(): Promise<ExternalMatch[]> {
     const awayTeam = event.teams?.away?.name || event.teams?.away?.teamID || 'TBA';
     
     // SGO v2 OddID format for Match Winner (Moneyline)
-    const homeMlId = 'points-all-game-ml-home';
-    const awayMlId = 'points-all-game-ml-away';
+    const homeOddId = 'points-all-game-ml-home';
+    const awayOddId = 'points-all-game-ml-away';
 
-    // Get American odds from common bookmakers
-    const homeAmOdds = event.odds?.[homeMlId]?.byBookmaker?.pinnacle?.odds || 
-                       event.odds?.[homeMlId]?.byBookmaker?.draftkings?.odds || '100';
-    const awayAmOdds = event.odds?.[awayMlId]?.byBookmaker?.pinnacle?.odds || 
-                       event.odds?.[awayMlId]?.byBookmaker?.draftkings?.odds || '100';
+    // Extract American odds from a common bookmaker (e.g., Pinnacle or DraftKings)
+    const homeAmOdds = event.odds?.[homeOddId]?.byBookmaker?.pinnacle?.odds || 
+                       event.odds?.[homeOddId]?.byBookmaker?.draftkings?.odds;
+    const awayAmOdds = event.odds?.[awayOddId]?.byBookmaker?.pinnacle?.odds || 
+                       event.odds?.[awayOddId]?.byBookmaker?.draftkings?.odds;
 
     // Convert to Decimal for the Exchange UI
     const homeDec = americanToDecimal(homeAmOdds);
@@ -115,27 +123,26 @@ export async function fetchSgoCricketEvents(): Promise<ExternalMatch[]> {
 
     return {
       id: event.eventID,
-      sgoEventId: event.eventID,
       name: `${homeTeam} v ${awayTeam}`,
       teamA: homeTeam,
       teamB: awayTeam,
       startTime: event.status?.startsAt || new Date().toISOString(),
       status: normalizeSgoStatus(event),
       venue: event.venue || 'Global Stadium',
-      series: event.leagueID || 'International',
+      series: event.leagueID || 'International Series',
       matchType: 'cricket',
       odds: {
         status: 'OPEN',
         home: { 
           back: [{ price: homeDec, size: 1000 }],
-          lay: [{ price: homeDec + 0.02, size: 500 }] // Simulated lay spread
+          lay: [{ price: Number((homeDec + 0.05).toFixed(2)), size: 500 }]
         },
         away: { 
           back: [{ price: awayDec, size: 1000 }],
-          lay: [{ price: awayDec + 0.02, size: 500 }] // Simulated lay spread
+          lay: [{ price: Number((awayDec + 0.05).toFixed(2)), size: 500 }]
         }
       },
-      currentScore: event.score?.display || '0-0',
+      currentScore: event.status?.score?.display || '0-0',
       statusText: event.status?.description || (event.status?.started ? 'In-Play' : 'Upcoming')
     };
   });
@@ -149,8 +156,10 @@ export async function fetchLiveScores(): Promise<ExternalMatch[]> {
 }
 
 /**
- * Placeholder for Fancy/Premium odds.
+ * Placeholder for Premium Fancy odds if supported by provider in future.
  */
 export async function fetchPremiumFancy(eventId: string) {
+  // SGO v2 provides props in the main events endpoint or via player props endpoints.
+  // For now, return empty to signify market suspended.
   return [];
 }
