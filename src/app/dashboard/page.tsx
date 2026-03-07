@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { MatchRow } from '@/components/dashboard/MatchRow';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
-import { GamesGrid } from '@/components/dashboard/GamesGrid';
 
 export default function Dashboard() {
   const firestore = useFirestore();
@@ -73,8 +72,8 @@ export default function Dashboard() {
                 <span>Exp: <span className="text-white font-black">0</span></span>
               </div>
               <div className="text-[11px] font-bold flex items-center gap-1 cursor-pointer" onClick={handleLogout}>
-                <span>{userData?.username || 'User'}</span>
-                <ChevronDown size={12} />
+                <span className="text-white">{userData?.username || 'User'}</span>
+                <ChevronDown size={12} className="text-white" />
               </div>
             </div>
           </div>
@@ -104,7 +103,7 @@ export default function Dashboard() {
           {matches?.slice(0, 5).map((m: any) => (
             <div key={m.id} className="flex items-center gap-1 px-3 border-r border-white/10 whitespace-nowrap cursor-pointer hover:bg-white/5 h-full">
               <Trophy size={10} className="text-accent" />
-              <span>{m.teamA} v {m.teamB}</span>
+              <span className="text-white">{m.teamA} v {m.teamB}</span>
             </div>
           ))}
         </div>
@@ -123,7 +122,7 @@ export default function Dashboard() {
 
         {/* Main Market List */}
         <div className="flex-1 p-0.5">
-          <div className="bg-[#f8fafc] border border-slate-200">
+          <div className="bg-[#f8fafc] border border-slate-200 h-full">
             <div className="flex items-center h-8 bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-500">
                <div className="flex-1 px-4">Game</div>
                <div className="w-[288px] flex">
@@ -133,7 +132,7 @@ export default function Dashboard() {
                </div>
             </div>
 
-            <div className="divide-y divide-slate-100 min-h-[500px]">
+            <div className="divide-y divide-slate-100 min-h-[500px] bg-white">
               {matchesLoading ? (
                 <div className="p-20 text-center flex flex-col items-center gap-2">
                   <Loader2 className="animate-spin text-primary" size={24} />
@@ -147,11 +146,6 @@ export default function Dashboard() {
                 <div className="p-20 text-center text-slate-400 text-[11px] font-bold italic">No active matches found.</div>
               )}
             </div>
-          </div>
-
-          {/* Bottom Thumbnails */}
-          <div className="mt-1">
-            <GamesGrid />
           </div>
         </div>
       </main>
