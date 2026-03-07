@@ -3,7 +3,6 @@
 /**
  * @fileOverview Professional SportsMonk v3 API Integration Service.
  * Implements full hierarchy: Leagues -> Fixtures -> Odds/Markets.
- * Replaces legacy SportsGameOdds integration.
  */
 
 export interface ExternalMatch {
@@ -41,6 +40,7 @@ const DEFAULT_TIMEOUT = 10000;
 async function fetchWithHeaders(endpoint: string, params: Record<string, string> = {}, retries = 3) {
   const apiToken = process.env.SPORTSMONK_API_TOKEN;
   if (!apiToken) {
+    console.error("[SportsMonk] CRITICAL: API Token missing in environment.");
     throw new Error("SPORTSMONK_API_TOKEN is missing. Please configure it in your environment.");
   }
 
@@ -52,6 +52,7 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
     try {
+      console.log(`[SportsMonk] Requesting: ${endpoint} (Attempt ${i + 1})`);
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
@@ -63,28 +64,37 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
 
       if (!response.ok) {
         if (response.status === 429) {
+          console.warn("[SportsMonk] Rate limited. Retrying...");
           await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
           continue;
         }
-        throw new Error(`SportsMonk API Error: ${response.status} - ${url}`);
+        console.error(`[SportsMonk] API Error: ${response.status} at ${endpoint}`);
+        throw new Error(`SportsMonk API Error: ${response.status}`);
       }
 
-      return await response.json();
+      const json = await response.json();
+      return json;
     } catch (error: any) {
       clearTimeout(timeoutId);
-      if (i === retries - 1) throw error;
+      if (i === retries - 1) {
+        console.error(`[SportsMonk] Final fetch failure for ${endpoint}:`, error.message);
+        throw error;
+      }
       await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
     }
   }
 }
 
 /**
- * normalizeStatus() - Maps SportsMonk status codes to app-internal status.
+ * normalizeStatus() - Maps SportsMonk Cricket status codes to app-internal status.
  */
-function normalizeStatus(smStatus: string): 'upcoming' | 'live' | 'finished' {
-  const status = smStatus.toUpperCase();
-  const live = ['LIVE', 'INPLAY', '1ST', '2ND', 'HT', '2ND_HALF', '1ST_HALF'];
-  const finished = ['FT', 'AET', 'POSTP', 'CANCL', 'ABD', 'FINISHED'];
+function normalizeStatus(smStatus: any): 'upcoming' | 'live' | 'finished' {
+  // SportsMonk v3 Cricket often uses "state" strings
+  const status = String(smStatus || '').toUpperCase();
+  
+  const live = ['LIVE', 'INPLAY', '1ST INNINGS', '2ND INNINGS', '1ST INNINGS (IN PLAY)', '2ND INNINGS (IN PLAY)', 'HT'];
+  const finished = ['FT', 'FINISHED', 'COMPLETED', 'ABANDONED', 'CANCL', 'POSTP'];
+  
   if (live.includes(status)) return 'live';
   if (finished.includes(status)) return 'finished';
   return 'upcoming';
@@ -96,7 +106,10 @@ function normalizeStatus(smStatus: string): 'upcoming' | 'live' | 'finished' {
 export async function getLeagues(): Promise<SportsMonkLeague[]> {
   try {
     const json = await fetchWithHeaders('cricket/leagues');
-    if (!json?.data) return [];
+    if (!json?.data) {
+      console.log("[SportsMonk] No league data returned.");
+      return [];
+    }
 
     return json.data.map((league: any) => ({
       id: league.id.toString(),
@@ -117,11 +130,17 @@ export async function getLeagues(): Promise<SportsMonkLeague[]> {
  */
 export async function getFixturesWithOdds(): Promise<ExternalMatch[]> {
   try {
+    // Note: 'state' is a common field in SportsMonk v3 Cricket fixtures
     const json = await fetchWithHeaders('cricket/fixtures', {
       include: 'participants;venue;league;score;odds.market',
     });
 
-    if (!json?.data) return [];
+    if (!json?.data) {
+      console.log("[SportsMonk] No fixture data returned.");
+      return [];
+    }
+
+    console.log(`[SportsMonk] Processing ${json.data.length} fixtures...`);
 
     return json.data.map((fixture: any) => {
       const homeTeamObj = fixture.participants?.find((p: any) => p.meta?.location === 'home');
@@ -130,6 +149,7 @@ export async function getFixturesWithOdds(): Promise<ExternalMatch[]> {
       const homeTeam = homeTeamObj?.name || 'TBA';
       const awayTeam = awayTeamObj?.name || 'TBA';
 
+      // Odds Extraction (Moneyline/Winner)
       const moneylineMarket = fixture.odds?.find((o: any) => 
         o.market?.name?.toLowerCase().includes('winner') || 
         o.market?.name?.toLowerCase().includes('moneyline')
@@ -143,18 +163,21 @@ export async function getFixturesWithOdds(): Promise<ExternalMatch[]> {
         v.outcomes?.some((out: any) => out.name?.toLowerCase().includes('away') || out.name === awayTeam)
       )?.value || 2.0;
 
+      // Status extraction (state is often the descriptive status in v3)
+      const smStatusText = fixture.state || fixture.status || 'Scheduled';
+
       return {
         id: fixture.id.toString(),
         name: `${homeTeam} v ${awayTeam}`,
         teamA: homeTeam,
         teamB: awayTeam,
         startTime: fixture.starting_at || new Date().toISOString(),
-        status: normalizeStatus(fixture.status),
+        status: normalizeStatus(smStatusText),
         venue: fixture.venue?.name || 'Global Stadium',
         series: fixture.league?.name || 'International Series',
         matchType: 'cricket',
-        currentScore: fixture.score?.description || '0-0',
-        statusText: fixture.status || 'Scheduled',
+        currentScore: fixture.score?.description || 'TBD',
+        statusText: smStatusText,
         odds: {
           status: 'OPEN',
           home: {
@@ -176,17 +199,16 @@ export async function getFixturesWithOdds(): Promise<ExternalMatch[]> {
 }
 
 /**
- * fetchLiveScores() - Legacy compatibility wrapper.
+ * fetchLiveScores() - Compatibility wrapper for live updates.
  */
 export async function fetchLiveScores(): Promise<ExternalMatch[]> {
   return getFixturesWithOdds();
 }
 
 /**
- * fetchPremiumFancy() - Legacy compatibility wrapper for micro-markets.
+ * fetchPremiumFancy() - Placeholder for micro-markets if available in odds.
  */
 export async function fetchPremiumFancy(eventId: string): Promise<any[]> {
-  // TODO: Implement specific SportsMonk fancy market retrieval from fixture.odds
   return [];
 }
 
@@ -194,8 +216,9 @@ export async function fetchPremiumFancy(eventId: string): Promise<any[]> {
  * syncSportsMonkData() - Master Sync Orchestrator
  */
 export async function syncSportsMonkData() {
-  console.log("[SportsMonk] Initiating Universal Sync...");
+  console.log("[SportsMonk] Initializing Professional Sync Pipeline...");
   const leagues = await getLeagues();
   const fixtures = await getFixturesWithOdds();
+  console.log(`[SportsMonk] Pipeline complete. Found ${leagues.length} leagues and ${fixtures.length} fixtures.`);
   return { leagues, fixtures };
 }
