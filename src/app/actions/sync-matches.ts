@@ -6,18 +6,14 @@ import {
   getEventsByCompetition,
   fetchMarketOdds,
   fetchFancyOdds,
-  fetchPremiumFancy,
   fetchLiveScores
 } from '@/services/cricket-api-service';
 
 /**
  * Master Ingestion Workflow: Implements the full professional hierarchy sync.
- * Flow: Competitions -> Events -> Markets -> Odds -> Firestore.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
-    console.log("Starting Master Ingestion Workflow...");
-    
     // 1. Fetch Hierarchy Layer 1: Competitions
     const competitions = await getCompetitions('4');
     for (const comp of competitions) {
@@ -31,75 +27,58 @@ export async function syncCricketMatchesAction(db: Firestore) {
     const liveMatches = await fetchLiveScores();
     const activeMatchIds = new Set<string>();
 
-    // 3. Discovery Chain: Link Betfair Events to Live Matches
-    for (const comp of competitions) {
+    // Pre-fetch all Betfair events to link them
+    const allBetfairEvents: any[] = [];
+    for (const comp of competitions.slice(0, 10)) { // Limit competitions to avoid timeout
       const events = await getEventsByCompetition(comp.id, '4');
-      if (!events || !Array.isArray(events)) continue;
-
-      for (const betfairEvent of events) {
-        const e = betfairEvent.event;
-        if (!e || !e.name) continue;
-
-        // Fuzzy match Betfair Event name to our Live Match list
-        const matchedMatch = liveMatches.find(m => {
-          const mName = m.name.toLowerCase();
-          const eName = e.name.toLowerCase();
-          return eName.includes(mName) || mName.includes(eName) || 
-                 (eName.includes(m.teamA.toLowerCase()) && eName.includes(m.teamB.toLowerCase()));
-        });
-
-        if (matchedMatch) {
-          activeMatchIds.add(matchedMatch.id);
-          
-          // Select professional MarketId (Hierarchy Layer 3)
-          const targetMarketNames = ['match odds', 'match winner', 'winner'];
-          const market = betfairEvent.markets?.find((m: any) => 
-            targetMarketNames.some(name => (m.marketName || '').toLowerCase().includes(name))
-          ) || betfairEvent.markets?.[0];
-
-          if (market) {
-            // Hierarchy Layer 4: Odds Pulse
-            const marketBook = await fetchMarketOdds(market.marketId);
-            
-            // Save Market & Odds to Nested Sub-collection
-            if (marketBook) {
-              const marketRef = doc(db, 'matches', matchedMatch.id, 'markets', 'match_winner');
-              await setDoc(marketRef, {
-                ...marketBook,
-                type: 'match_winner',
-                lastUpdated: new Date().toISOString()
-              }, { merge: true });
-
-              // Update top-level match with Betfair metadata and current price summary
-              const matchRef = doc(db, 'matches', matchedMatch.id);
-              await setDoc(matchRef, {
-                ...matchedMatch,
-                betfairEventId: e.id,
-                betfairMarketId: market.marketId,
-                odds: {
-                  status: marketBook.status,
-                  home: { back: marketBook.runners[0]?.back?.[0]?.price || 1.00, lay: marketBook.runners[0]?.lay?.[0]?.price || 0.00 },
-                  away: { back: marketBook.runners[1]?.back?.[0]?.price || 1.00, lay: marketBook.runners[1]?.lay?.[0]?.price || 0.00 },
-                },
-                lastUpdated: new Date().toISOString()
-              }, { merge: true });
-            }
-
-            // Sync High-Frequency Micro Markets (Fancy/Bookmaker)
-            const fancy = await fetchFancyOdds(e.id, '4');
-            if (fancy?.bookmaker) {
-               await setDoc(doc(db, 'matches', matchedMatch.id, 'markets', 'bookmaker'), {
-                 id: 'bookmaker',
-                 type: 'bookmaker',
-                 selections: fancy.bookmaker.map((b: any) => ({ name: b.runnerName, odds: b.backPrice || 1.00, layOdds: b.layPrice || 0.00 }))
-               }, { merge: true });
-            }
-          }
-        }
+      if (events && Array.isArray(events)) {
+        allBetfairEvents.push(...events);
       }
     }
 
-    // 4. Pruning: No More, No Less (Remove stale matches)
+    // 3. Process each Live Match
+    for (const matchedMatch of liveMatches) {
+      activeMatchIds.add(matchedMatch.id);
+      let matchEnrichment = {};
+
+      // Fuzzy match Betfair Event to our Live Match
+      const betfairEvent = allBetfairEvents.find(e => {
+        const eName = (e.name || '').toLowerCase();
+        const mHome = (matchedMatch.teamA || '').toLowerCase();
+        const mAway = (matchedMatch.teamB || '').toLowerCase();
+        return (eName.includes(mHome) && eName.includes(mAway));
+      });
+
+      if (betfairEvent) {
+        // Find market odds for the linked event
+        const marketOddsResult = await fetchMarketOdds(betfairEvent.id); // Assuming eventId can act as primary market ID or similar fallback
+        
+        matchEnrichment = {
+          betfairEventId: betfairEvent.id,
+          odds: marketOddsResult ? {
+            status: marketOddsResult.status,
+            home: { 
+              back: marketOddsResult.runners[0]?.back?.[0]?.price || 1.00, 
+              lay: marketOddsResult.runners[0]?.lay?.[0]?.price || 0.00 
+            },
+            away: { 
+              back: marketOddsResult.runners[1]?.back?.[0]?.price || 1.00, 
+              lay: marketOddsResult.runners[1]?.lay?.[0]?.price || 0.00 
+            },
+          } : null
+        };
+      }
+
+      // Save Match to Firestore (Always save, enriched if possible)
+      const matchRef = doc(db, 'matches', matchedMatch.id);
+      await setDoc(matchRef, {
+        ...matchedMatch,
+        ...matchEnrichment,
+        lastUpdated: new Date().toISOString()
+      }, { merge: true });
+    }
+
+    // 4. Pruning: Remove stale matches
     const existingSnap = await getDocs(collection(db, 'matches'));
     const batch = writeBatch(db);
     let pruned = 0;
