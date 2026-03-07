@@ -60,12 +60,12 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
     : (premiumFancyMarket?.selections || []);
 
   const formatPrice = (p: any, status: string, lastPrice?: number) => {
-    // Use ONLY market-level status for suspension UI
-    if (status !== 'OPEN') return 'SUSP';
+    // Safety check for undefined status
+    const currentStatus = status || 'CLOSED';
+    if (currentStatus !== 'OPEN') return 'SUSP';
     
-    // If market is OPEN but specific liquidity box is empty
     if (!p || p === 0 || p === 1) {
-      return lastPrice ? lastPrice.toFixed(2) : '-';
+      return lastPrice ? lastPrice.toFixed(2) : '--';
     }
     return p.toFixed(2);
   };
@@ -115,42 +115,48 @@ export function BettingPanel({ match, userId, premiumFancyOverride }: { match: a
           </div>
 
           <div className="divide-y divide-slate-100">
-            {matchWinnerMarket?.selections.map((selection: any) => {
-              const backLiquidity = selection.backLiquidity || [];
-              const layLiquidity = selection.layLiquidity || [];
-              const mStatus = matchWinnerMarket.status || 'OPEN';
-              
-              return (
-                <div key={selection.id} className="flex items-center justify-between h-14 hover:bg-slate-50 transition-colors">
-                  <div className="px-4 flex flex-col">
-                    <span className="font-black italic uppercase text-slate-800 tracking-tighter text-sm">{selection.name}</span>
-                    <span className="text-[9px] text-red-500 font-bold">-{stakeNum.toFixed(0)}</span>
-                  </div>
-
-                  <div className="grid grid-cols-6 w-[288px] h-full items-center">
-                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[2]?.price)}>
-                      <span>{formatPrice(backLiquidity[2]?.price, mStatus)}</span>
-                    </div>
-                    <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[1]?.price)}>
-                      <span>{formatPrice(backLiquidity[1]?.price, mStatus)}</span>
-                    </div>
-                    <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[0]?.price)}>
-                      <span className="text-xs">{formatPrice(backLiquidity[0]?.price, mStatus, selection.lastPrice)}</span>
+            {matchWinnerMarket ? (
+              matchWinnerMarket.selections.map((selection: any) => {
+                const backLiquidity = selection.backLiquidity || [];
+                const layLiquidity = selection.layLiquidity || [];
+                const mStatus = matchWinnerMarket.status || 'OPEN';
+                
+                return (
+                  <div key={selection.id} className="flex items-center justify-between h-14 hover:bg-slate-50 transition-colors">
+                    <div className="px-4 flex flex-col">
+                      <span className="font-black italic uppercase text-slate-800 tracking-tighter text-sm">{selection.name}</span>
+                      <span className="text-[9px] text-red-500 font-bold">-{stakeNum.toFixed(0)}</span>
                     </div>
 
-                    <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[0]?.price, true)}>
-                      <span className="text-xs">{formatPrice(layLiquidity[0]?.price, mStatus)}</span>
-                    </div>
-                    <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[1]?.price, true)}>
-                      <span>{formatPrice(layLiquidity[1]?.price, mStatus)}</span>
-                    </div>
-                    <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[2]?.price, true)}>
-                      <span>{formatPrice(layLiquidity[2]?.price, mStatus)}</span>
+                    <div className="grid grid-cols-6 w-[288px] h-full items-center">
+                      <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[2]?.price)}>
+                        <span>{formatPrice(backLiquidity[2]?.price, mStatus)}</span>
+                      </div>
+                      <div className="odds-grid-box odds-back-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[1]?.price)}>
+                        <span>{formatPrice(backLiquidity[1]?.price, mStatus)}</span>
+                      </div>
+                      <div className="odds-grid-box odds-back" onClick={() => handlePlaceBet(matchWinnerMarket, selection, backLiquidity[0]?.price)}>
+                        <span className="text-xs">{formatPrice(backLiquidity[0]?.price, mStatus, selection.lastPrice)}</span>
+                      </div>
+
+                      <div className="odds-grid-box odds-lay" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[0]?.price, true)}>
+                        <span className="text-xs">{formatPrice(layLiquidity[0]?.price, mStatus)}</span>
+                      </div>
+                      <div className="odds-grid-box odds-lay-light" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[1]?.price, true)}>
+                        <span>{formatPrice(layLiquidity[1]?.price, mStatus)}</span>
+                      </div>
+                      <div className="odds-grid-box odds-lay-light border-r-0" onClick={() => handlePlaceBet(matchWinnerMarket, selection, layLiquidity[2]?.price, true)}>
+                        <span>{formatPrice(layLiquidity[2]?.price, mStatus)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="p-8 text-center text-slate-300 text-[11px] font-bold uppercase italic bg-white">
+                Match Odds currently suspended or unavailable.
+              </div>
+            )}
           </div>
         </div>
 

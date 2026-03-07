@@ -7,14 +7,21 @@ import { cn } from '@/lib/utils';
 
 export function MatchRow({ match }: { match: any }) {
   const isLive = match.status === 'live';
-  const matchDate = match.startTime ? parseISO(match.startTime) : new Date();
+  
+  // Safe date parsing: handle empty or invalid startTime
+  let matchDate: Date;
+  try {
+    matchDate = match.startTime ? parseISO(match.startTime) : new Date();
+  } catch (e) {
+    matchDate = new Date();
+  }
 
   // Odds Extraction for 1-X-2
   const getOdds = (side: 'home' | 'away' | 'draw') => {
     const data = match.odds?.[side];
     return {
-      back: data?.back?.[0]?.price || '-',
-      lay: data?.lay?.[0]?.price || '-'
+      back: data?.back?.[0]?.price || '--',
+      lay: data?.lay?.[0]?.price || '--'
     };
   };
 
@@ -27,7 +34,7 @@ export function MatchRow({ match }: { match: any }) {
       <div className="flex-1 flex items-center px-4 gap-3">
         <div className="flex flex-col flex-1">
           <Link href={`/match/${match.id}`} className="hover:underline font-bold text-slate-700 truncate">
-            {match.teamA} v {match.teamB} / {format(matchDate, 'dd/MM/yyyy HH:mm:ss')}
+            {match.teamA} v {match.teamB} / {match.startTime ? format(matchDate, 'dd/MM/yyyy HH:mm:ss') : 'Time TBD'}
           </Link>
         </div>
         

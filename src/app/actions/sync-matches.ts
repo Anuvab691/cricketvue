@@ -5,6 +5,7 @@ import { syncSportbexData } from '@/services/cricket-api-service';
 
 /**
  * Sportbex Data Ingestion: Fetches live matches and updates terminal state.
+ * Strictly adheres to rules: Do NOT inject fake/placeholder odds.
  */
 export async function syncCricketMatchesAction(db: Firestore) {
   try {
@@ -25,7 +26,8 @@ export async function syncCricketMatchesAction(db: Firestore) {
         lastUpdated: new Date().toISOString()
       }, { merge: true });
 
-      // Create a default market if odds exist in our normalized object
+      // Create a default market ONLY if real odds exist in the normalized object
+      // (odds is currently set to undefined in normalizeLiveMatch)
       if (match.odds) {
         const marketRef = doc(db, 'matches', match.id, 'markets', 'moneyline');
         batch.set(marketRef, {
