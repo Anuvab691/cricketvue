@@ -4,44 +4,37 @@ import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export function GamesGrid() {
-  // Cricket-only focused games for the dashboard
   const games = [
-    { name: 'SUPER OVER LIVE', id: 'cricket-ball' },
-    { name: 'CHAMPIONS TROPHY', id: 'match-banner-1' },
-    { name: 'BOUNDARY BLITZ', id: 'cricket-ball' },
-    { name: 'WICKET WATCH', id: 'match-banner-1' },
-    { name: 'TEST CLASSIC', id: 'cricket-ball' },
-    { name: 'T20 SMASH', id: 'match-banner-1' },
-    { name: 'CREASE MASTER', id: 'cricket-ball' },
-    { name: 'STADIUM VIP', id: 'match-banner-1' },
-    { name: 'BALL-BY-BALL', id: 'cricket-ball' },
-    { name: 'BATTING LEGENDS', id: 'match-banner-1' },
+    { name: 'MATKA MARKET', id: 'match-banner-1' },
+    { name: 'TEENPATTI 1DAY', id: 'cricket-ball' },
+    { name: 'DOLI DANA LIVE', id: 'casino-1' },
+    { name: 'MOGAMBO', id: 'match-banner-1' },
+    { name: 'TEEN PATTI 20-20', id: 'cricket-ball' },
+    { name: 'LUCKY 6', id: 'casino-1' },
+    { name: 'BEACH ROULETTE', id: 'match-banner-1' },
+    { name: 'ROULETTE', id: 'cricket-ball' },
+    { name: 'GOLDEN ROULETTE', id: 'casino-1' },
+    { name: 'POISON TEENPATTI', id: 'match-banner-1' },
   ];
 
-  const defaultPlaceholder = {
-    imageUrl: 'https://picsum.photos/seed/cricket/600/400',
-    imageHint: 'cricket match'
-  };
-
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1">
+    <div className="grid grid-cols-5 md:grid-cols-10 gap-0.5">
       {games.map((game, i) => {
-        const placeholder = PlaceHolderImages.find(p => p.id === game.id) || PlaceHolderImages[0] || defaultPlaceholder;
+        const placeholder = PlaceHolderImages[i % PlaceHolderImages.length];
         
         return (
-          <div key={i} className="relative aspect-video group overflow-hidden cursor-pointer border border-slate-200">
+          <div key={i} className="relative aspect-[4/3] group overflow-hidden cursor-pointer border border-slate-300">
             <Image 
               src={placeholder.imageUrl} 
               alt={game.name}
               fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
+              className="object-cover"
               data-ai-hint={placeholder.imageHint}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2">
-              <span className="text-[9px] font-black text-white uppercase tracking-tighter drop-shadow-md">
+            <div className="absolute inset-x-0 bottom-0 bg-black/60 p-1 text-center">
+              <span className="text-[7px] font-black text-white uppercase leading-none truncate block">
                 {game.name}
               </span>
-              <div className="w-full h-1 bg-primary/40 mt-1 scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
             </div>
           </div>
         );

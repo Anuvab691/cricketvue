@@ -1,106 +1,80 @@
-
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  Menu, X, ShieldAlert, ShieldCheck, Users, 
-  ChevronDown, Trophy, Clock, LayoutGrid, Star
+  Menu, X, ChevronDown, Trophy, Star, ChevronRight, PlusSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useFirestore, useDoc } from '@/firebase';
-import { doc } from 'firebase/firestore';
-import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 
 export function Sidebar({ userId }: { userId: string }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const firestore = useFirestore();
 
-  const userRef = useMemoFirebase(() => {
-    if (!firestore || !userId) return null;
-    return doc(firestore, 'users', userId);
-  }, [firestore, userId]);
-
-  const { data: userData } = useDoc(userRef);
+  const Section = ({ title, items }: { title: string, items: { name: string, icon?: any }[] }) => (
+    <div className="mb-0.5">
+      <div className="sidebar-section-header">
+        <span>{title}</span>
+        <ChevronDown size={12} />
+      </div>
+      <div className="flex flex-col">
+        {items.map((item, idx) => (
+          <div key={idx} className="sidebar-item">
+             {item.icon && <item.icon size={12} className="text-slate-500" />}
+             <span className="flex-1">{item.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <>
       <div className="lg:hidden fixed top-2 left-2 z-50">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsOpen(!isOpen)}>
+        <Button variant="outline" size="icon" className="h-8 w-8 bg-primary text-white" onClick={() => setIsOpen(!isOpen)}>
           {isOpen ? <X size={16} /> : <Menu size={16} />}
         </Button>
       </div>
 
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-40 w-[240px] bg-white border-r border-slate-200 transition-transform lg:translate-x-0 shadow-sm",
+        "fixed inset-y-0 left-0 z-40 w-[200px] bg-[#f1f5f9] border-r border-slate-300 transition-transform lg:translate-x-0 overflow-y-auto no-scrollbar pt-12 lg:pt-0",
         !isOpen && "-translate-x-full"
       )}>
-        <div className="flex flex-col h-full overflow-y-auto custom-scrollbar">
-          <div className="mt-0">
-            <div className="sidebar-section-header">
-              <span>Main Menu</span>
-              <ChevronDown size={14} />
-            </div>
-            <div className="bg-slate-50">
-              <Link href="/dashboard" className={cn("sidebar-item", pathname === '/dashboard' && "bg-slate-200 font-bold text-primary")}>
-                <LayoutGrid size={12} /> Dashboard
-              </Link>
-              <Link href="/tournaments" className={cn("sidebar-item", pathname === '/tournaments' && "bg-slate-200 font-bold text-primary")}>
-                <Star size={12} className="text-yellow-500" /> Tournaments
-              </Link>
-              <div className={cn("sidebar-item font-bold text-slate-800", pathname.includes('match') && !pathname.includes('centre') && !pathname.includes('tour') && "text-primary")}>
-                <Trophy size={12} className="text-primary" /> Live Cricket
-              </div>
-            </div>
+        <Section 
+          title="Racing Sports" 
+          items={[
+            { name: "Horse Racing" },
+            { name: "Greyhound Racing" }
+          ]} 
+        />
+        
+        <Section 
+          title="Others" 
+          items={[
+            { name: "Our Casino" },
+            { name: "Our VIP Casino" },
+            { name: "Our Premium Casino" },
+            { name: "Our Virtual" },
+            { name: "Tembo" },
+            { name: "Live Casino" },
+            { name: "Slot Game" },
+            { name: "Fantasy Game" }
+          ]} 
+        />
 
-            <div className="sidebar-section-header mt-1">
-              <span>Match Center</span>
-              <ChevronDown size={14} />
+        <div className="sidebar-section-header">
+          <span>All Sports</span>
+          <ChevronDown size={12} />
+        </div>
+        <div className="flex flex-col">
+          {['Politics', 'Cricket', 'Football', 'Tennis', 'Table Tennis', 'Badminton', 'Esoccer'].map((sport) => (
+            <div key={sport} className="sidebar-item font-bold">
+               <PlusSquare size={12} className="text-slate-500" />
+               <span>{sport}</span>
             </div>
-            <div className="bg-slate-50">
-              <Link href="/match-centre/international" className="sidebar-item">International</Link>
-              <Link href="/match-centre/t20" className="sidebar-item">T20 Leagues</Link>
-              <Link href="/match-centre/test" className="sidebar-item">Test Series</Link>
-              <Link href="/match-centre/odi" className="sidebar-item">One Day Int'l</Link>
-            </div>
-
-            <div className="sidebar-section-header mt-1">
-              <span>My Stats</span>
-              <ChevronDown size={14} />
-            </div>
-            <div className="bg-slate-50">
-              <Link href="/my-bets" className={cn("sidebar-item", pathname === '/my-bets' && "bg-slate-200 font-bold text-primary")}>
-                <Clock size={12} /> My Bets
-              </Link>
-            </div>
-
-            {(userData?.role === 'admin' || userData?.role === 'super' || userData?.role === 'master') && (
-              <div className="sidebar-section-header mt-4 bg-slate-800">
-                <span>Network Management</span>
-                <ShieldAlert size={14} />
-              </div>
-            )}
-            <div className="bg-slate-100">
-              {userData?.role === 'admin' && (
-                <Link href="/admin" className={cn("sidebar-item", pathname === '/admin' && "bg-slate-200 font-bold text-red-600")}>
-                  <ShieldAlert size={12} /> Apex Admin
-                </Link>
-              )}
-              {userData?.role === 'super' && (
-                <Link href="/super" className={cn("sidebar-item", pathname === '/super' && "bg-slate-200 font-bold text-green-600")}>
-                  <ShieldCheck size={12} /> Super Panel
-                </Link>
-              )}
-              {userData?.role === 'master' && (
-                <Link href="/master" className={cn("sidebar-item", pathname === '/master' && "bg-slate-200 font-bold text-blue-600")}>
-                  <Users size={12} /> Master Hub
-                </Link>
-              )}
-            </div>
-          </div>
+          ))}
         </div>
       </aside>
     </>

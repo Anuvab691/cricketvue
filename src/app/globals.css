@@ -10,11 +10,11 @@
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    /* AllPanel Blue */
-    --primary: 200 100% 35%; 
+    /* AllPanel Specific Blue */
+    --primary: 199 89% 35%; 
     --primary-foreground: 0 0% 100%;
-    /* Dark Navigation Bar */
-    --secondary: 215 25% 27%;
+    /* AllPanel Dark Nav */
+    --secondary: 210 22% 22%;
     --secondary-foreground: 0 0% 100%;
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
@@ -25,29 +25,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
-    --radius: 0.2rem;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.1% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --radius: 0.1rem;
   }
 }
 
@@ -56,62 +34,50 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-body antialiased;
+    @apply bg-[#f1f5f9] text-slate-900 font-body antialiased;
   }
 }
 
 .exchange-header {
-  @apply bg-[#0077b6] text-white py-2 px-4 flex justify-between items-center shadow-md;
+  @apply bg-[#0072b1] text-white py-1 px-4 flex justify-between items-center shadow-sm;
 }
 
 .exchange-nav {
-  @apply bg-[#2c3e50] text-white flex items-center h-10 px-4 text-xs font-bold uppercase;
+  @apply bg-[#1e293b] text-white flex items-center h-9 px-2 text-[11px] font-bold uppercase;
 }
 
 .exchange-sub-nav {
-  @apply bg-[#e9ecef] text-slate-700 flex items-center h-9 px-4 text-xs font-bold border-b border-slate-300;
+  @apply bg-[#334155] text-white flex items-center h-8 px-2 text-[10px] font-bold border-t border-white/10;
 }
 
 .match-row {
-  @apply border-b border-slate-200 hover:bg-slate-50 transition-colors flex items-center px-4 py-2 bg-white text-sm;
+  @apply border-b border-slate-200 hover:bg-slate-50 transition-colors flex items-center bg-white text-[11px] h-11;
 }
 
 .odds-grid-box {
-  @apply w-12 h-10 flex flex-col items-center justify-center text-[10px] font-bold border-r border-white/20 cursor-pointer transition-all hover:brightness-95 active:scale-95;
+  @apply w-[46px] h-8 flex flex-col items-center justify-center text-[10px] font-bold border-r border-white/20 cursor-pointer transition-all hover:brightness-95;
 }
 
 .odds-back {
   @apply bg-[#72bbef] text-blue-900;
 }
 
-.odds-back-light {
-  @apply bg-[#72bbef]/60 text-blue-900/70;
-}
-
 .odds-lay {
   @apply bg-[#faa9ba] text-pink-900;
 }
 
-.odds-lay-light {
-  @apply bg-[#faa9ba]/60 text-pink-900/70;
-}
-
-.market-header {
-  @apply bg-[#4d5d6d] text-white px-3 py-1.5 text-[11px] font-bold uppercase flex justify-between items-center rounded-t-sm;
-}
-
-.scoreboard-team-row {
-  @apply flex items-center justify-between py-1 border-b border-white/5;
-}
-
-.last-ball-circle {
-  @apply w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white;
-}
-
 .sidebar-section-header {
-  @apply bg-[#00a8ff] text-white px-3 py-2 text-xs font-bold flex justify-between items-center cursor-pointer;
+  @apply bg-[#0072b1] text-white px-3 py-1.5 text-[11px] font-bold flex justify-between items-center cursor-pointer uppercase;
 }
 
 .sidebar-item {
-  @apply px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-100 flex items-center gap-2 cursor-pointer border-b border-slate-100;
+  @apply px-4 py-2 text-[11px] text-slate-700 bg-[#e2e8f0] hover:bg-slate-300 flex items-center gap-2 cursor-pointer border-b border-slate-300;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

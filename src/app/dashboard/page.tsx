@@ -1,30 +1,27 @@
 'use client';
 
-import { useFirestore, useUser, useDoc, useCollection } from '@/firebase';
+import { useFirestore, useUser, useDoc, useCollection, useAuth } from '@/firebase';
 import { doc, collection } from 'firebase/firestore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { 
-  UserCircle, 
-  Zap, ShieldCheck, Globe, Database, Loader2
+  UserCircle, Loader2, Search, Download, HelpCircle
 } from 'lucide-react';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { useState } from 'react';
 import { logout } from '@/firebase/auth/auth-service';
-import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { GamesGrid } from '@/components/dashboard/GamesGrid';
 import { MatchRow } from '@/components/dashboard/MatchRow';
 import { SyncDataButton } from '@/components/dashboard/SyncDataButton';
-import { NetworkPulse } from '@/components/dashboard/NetworkPulse';
+import { GamesGrid } from '@/components/dashboard/GamesGrid';
 
 export default function Dashboard() {
   const firestore = useFirestore();
   const auth = useAuth();
   const router = useRouter();
   const { user } = useUser();
-  const [activeNav, setActiveNav] = useState('Home');
+  const [activeNav, setActiveNav] = useState('CRICKET');
   
   const effectiveUserId = user?.uid || 'guest';
 
@@ -45,117 +42,121 @@ export default function Dashboard() {
     router.push('/login');
   };
 
-  const filteredMatches = matches || [];
+  const navItems = ['HOME', 'LOTTERY', 'CRICKET', 'TENNIS', 'FOOTBALL', 'TABLE TENNIS', 'BACCARAT', '32 CARDS', 'TEENPATTI', 'POKER', 'LUCKY 7'];
 
   return (
-    <div className="flex min-h-screen bg-[#f8f9fa] text-slate-900">
+    <div className="flex min-h-screen bg-[#f1f5f9]">
       <Sidebar userId={effectiveUserId} />
       
-      <main className="flex-1 lg:pl-[240px] flex flex-col">
-        <header className="exchange-header h-12">
+      <main className="flex-1 lg:pl-[200px] flex flex-col">
+        {/* Top Branding Header */}
+        <header className="exchange-header h-14">
           <div className="flex items-center gap-4">
             <Link href="/">
-               <h1 className="text-2xl font-black italic tracking-tighter">CRICKETVUE</h1>
+               <h1 className="text-5xl font-black italic tracking-tighter text-white">ALL</h1>
             </Link>
           </div>
           
-          <div className="flex items-center gap-4">
-            <NetworkPulse />
-            <SyncDataButton />
-            <div className="flex items-center gap-2 text-xs font-bold text-white">
-              <span className="opacity-80">Balance:</span>
-              <span className="text-yellow-400">
-                {userData?.role === 'admin' ? 'UNLIMITED' : (userData?.tokenBalance || 0).toLocaleString()}
-              </span>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4 text-white text-[10px] font-bold">
+              <div className="flex items-center gap-1 cursor-pointer hover:underline">
+                <Search size={14} /> Rules
+              </div>
+              <div className="flex items-center gap-1 cursor-pointer hover:underline">
+                <Download size={14} /> Download Apk
+              </div>
             </div>
-            <div className="flex items-center gap-1 text-[10px] text-white opacity-70 cursor-pointer hover:opacity-100" onClick={handleLogout}>
-              <UserCircle size={16} />
-              <span>{userData?.username || 'User'}</span>
+            
+            <div className="flex flex-col items-end text-white leading-tight">
+              <div className="text-[11px] font-bold flex gap-2">
+                <span>Balance: <span className="text-yellow-400 font-black">{userData?.tokenBalance?.toFixed(1) || '0.0'}</span></span>
+                <span>Exp: <span className="text-yellow-400 font-black">0</span></span>
+              </div>
+              <div className="text-[11px] font-bold flex items-center gap-1 cursor-pointer" onClick={handleLogout}>
+                <span>{userData?.username || 'User'}</span>
+                <ChevronDown size={12} />
+              </div>
             </div>
           </div>
         </header>
 
-        <nav className="exchange-nav">
-          <div className="flex items-center gap-6 overflow-x-auto no-scrollbar h-full">
-            {['Home', 'Cricket', 'In-Play', 'Multi Markets'].map(item => (
-              <button 
-                key={item} 
-                onClick={() => setActiveNav(item)}
-                className={cn(
-                  "cursor-pointer hover:text-accent whitespace-nowrap transition-all px-1 h-full text-[11px] font-bold uppercase flex items-center border-b-2",
-                  activeNav === item ? "text-accent border-accent" : "text-white/70 border-transparent"
-                )}
-              >
-                {item}
-              </button>
-            ))}
+        {/* Main Nav Bar */}
+        <nav className="exchange-nav no-scrollbar overflow-x-auto">
+          {navItems.map(item => (
+            <button 
+              key={item} 
+              onClick={() => setActiveNav(item)}
+              className={cn(
+                "px-3 h-full flex items-center whitespace-nowrap transition-colors",
+                activeNav === item ? "bg-[#0072b1] text-white" : "hover:bg-white/10 text-white/80"
+              )}
+            >
+              {item}
+            </button>
+          ))}
+          <div className="ml-auto pr-4 flex items-center gap-2">
+            <SyncDataButton />
           </div>
         </nav>
 
-        <div className="exchange-sub-nav">
-          <div className="flex items-center gap-4 w-full">
-            <div className="bg-slate-800 text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 shrink-0">
-              <Zap size={10} className="fill-yellow-400 text-yellow-400" /> Network Pulse Active
+        {/* Event Ticker Sub-Nav */}
+        <div className="exchange-sub-nav no-scrollbar overflow-x-auto">
+          {matches?.slice(0, 5).map((m: any) => (
+            <div key={m.id} className="flex items-center gap-1 px-3 border-r border-white/10 whitespace-nowrap cursor-pointer hover:bg-white/5 h-full">
+              <Trophy size={10} className="text-accent" />
+              <span>{m.teamA} v {m.teamB}</span>
             </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-[11px] whitespace-nowrap text-slate-500 font-bold uppercase">
-                Sportbex Terminal: Connected to Global Exchange Feed. High-Frequency Auto-Sync (10s) Active.
-              </p>
-            </div>
-          </div>
+          ))}
         </div>
 
-        <div className="p-1 md:p-3">
-          <div className="bg-slate-100 border border-slate-200 flex items-center px-4 py-1 text-[10px] font-bold text-slate-500 uppercase">
-            <div className="flex-1">Match</div>
-            <div className="w-[180px] flex justify-around">
-               <span>Winner</span>
-               <span>Bookmaker</span>
-               <span>Fancy</span>
-            </div>
-          </div>
+        {/* Tab Selection Filter */}
+        <div className="bg-[#e2e8f0] flex items-center h-8 px-1">
+          {['Cricket', 'Football', 'Tennis', 'Table Tennis', 'Esoccer', 'Horse Racing', 'Greyhound Racing'].map(tab => (
+            <button key={tab} className={cn(
+              "px-3 h-7 text-[10px] font-bold flex items-center justify-center rounded-sm mx-0.5",
+              tab === 'Cricket' ? "bg-secondary text-white" : "text-slate-700 hover:bg-slate-200"
+            )}>
+              {tab}
+            </button>
+          ))}
+        </div>
 
-          <div className="border-x border-slate-200 shadow-sm bg-white min-h-[400px]">
-            {matchesLoading ? (
-              <div className="p-20 text-center flex flex-col items-center gap-2">
-                <Loader2 className="animate-spin text-primary" size={32} />
-                <p className="text-[10px] font-bold uppercase text-slate-400">Fetching Market Data...</p>
-              </div>
-            ) : filteredMatches.length > 0 ? (
-              <div className="divide-y divide-slate-100">
-                {filteredMatches.map((match: any) => (
-                  <MatchRow key={match.id} match={match} />
-                ))}
-              </div>
-            ) : (
-              <div className="p-20 text-center flex flex-col items-center gap-4">
-                <Database size={40} className="text-slate-200" />
-                <div className="space-y-1">
-                  <p className="text-sm font-black uppercase text-slate-400">Match Feed Empty</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    Use the 'Sync Now' button to pull fresh matches from the network.
-                  </p>
+        {/* Main Market List */}
+        <div className="flex-1 p-0.5">
+          <div className="bg-[#f8fafc] border border-slate-200">
+            <div className="flex items-center h-8 bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-500">
+               <div className="flex-1 px-4">Game</div>
+               <div className="w-[288px] flex">
+                 <div className="flex-1 text-center">1</div>
+                 <div className="flex-1 text-center">X</div>
+                 <div className="flex-1 text-center">2</div>
+               </div>
+            </div>
+
+            <div className="divide-y divide-slate-100 min-h-[500px]">
+              {matchesLoading ? (
+                <div className="p-20 text-center flex flex-col items-center gap-2">
+                  <Loader2 className="animate-spin text-primary" size={24} />
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Loading Markets...</p>
                 </div>
-              </div>
-            )}
+              ) : matches && matches.length > 0 ? (
+                matches.map((match: any) => (
+                  <MatchRow key={match.id} match={match} />
+                ))
+              ) : (
+                <div className="p-20 text-center text-slate-400 text-[11px] font-bold italic">No active matches found.</div>
+              )}
+            </div>
           </div>
 
-          <div className="mt-6">
-            <div className="flex items-center gap-2 mb-3 px-1">
-               <ShieldCheck className="text-primary" size={16} />
-               <h3 className="text-xs font-black uppercase italic tracking-tight">Exchange Mini Games</h3>
-            </div>
+          {/* Bottom Thumbnails */}
+          <div className="mt-1">
             <GamesGrid />
           </div>
         </div>
-
-        <footer className="mt-auto p-4 border-t border-slate-200 bg-white">
-          <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-50">
-            <Globe size={10} />
-            Sportbex Pro Data Pulse: Operational
-          </div>
-        </footer>
       </main>
     </div>
   );
 }
+
+import { Trophy, ChevronDown } from 'lucide-react';
