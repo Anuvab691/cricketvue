@@ -1,8 +1,9 @@
 'use server';
 
 /**
- * @fileOverview Professional Service for SportsGameOdds (SGO) v2 API.
- * This service implements the SGO v2 protocol for fetching live cricket events, scores, and odds.
+ * @fileOverview Professional SportsMonk v3 API Integration Service.
+ * Implements full hierarchy: Leagues -> Fixtures -> Odds/Markets.
+ * Replaces legacy SportsGameOdds integration.
  */
 
 export interface ExternalMatch {
@@ -22,145 +23,179 @@ export interface ExternalMatch {
   lastUpdated?: string;
 }
 
-const SGO_BASE_URL = "https://api.sportsgameodds.com/v2/";
-
-/**
- * Converts American odds (e.g., -110, +150) to Decimal odds (e.g., 1.91, 2.50).
- * SGO v2 provides American odds, but the terminal uses Decimal format.
- */
-function americanToDecimal(american: string | number | undefined): number {
-  if (american === undefined) return 2.0;
-  const num = typeof american === 'string' ? parseFloat(american) : american;
-  if (isNaN(num)) return 2.0;
-
-  if (num > 0) {
-    return (num / 100) + 1;
-  } else {
-    return (100 / Math.abs(num)) + 1;
-  }
+export interface SportsMonkLeague {
+  id: string;
+  name: string;
+  sportId: number;
+  countryId: number;
+  active: boolean;
+  updatedAt: string;
 }
 
+const SPORTSMONK_BASE_URL = "https://api.sportmonks.com/v3";
+const DEFAULT_TIMEOUT = 10000;
+
 /**
- * Robust fetch helper with SGO v2 authentication.
+ * fetchWithHeaders() - Robust fetch helper with timeout and retry logic.
  */
-async function fetchSgo(endpoint: string, params: Record<string, string> = {}) {
-  const apiKey = process.env.SGO_API_KEY;
-  if (!apiKey) {
-    console.error("SGO_API_KEY is missing from environment variables.");
-    return null;
+async function fetchWithHeaders(endpoint: string, params: Record<string, string> = {}, retries = 3) {
+  const apiToken = process.env.SPORTSMONK_API_TOKEN;
+  if (!apiToken) {
+    throw new Error("SPORTSMONK_API_TOKEN is missing. Please configure it in your environment.");
   }
 
-  const queryParams = new URLSearchParams({ ...params, apiKey });
-  const url = `${SGO_BASE_URL}${endpoint.replace(/^\//, '')}?${queryParams.toString()}`;
+  const queryParams = new URLSearchParams({ ...params, api_token: apiToken });
+  const url = `${SPORTSMONK_BASE_URL}/${endpoint.replace(/^\//, '')}?${queryParams.toString()}`;
 
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      cache: 'no-store',
-      headers: {
-        'Accept': 'application/json',
+  for (let i = 0; i < retries; i++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+          continue;
+        }
+        throw new Error(`SportsMonk API Error: ${response.status} - ${url}`);
       }
-    });
 
-    if (!response.ok) {
-      console.error(`SGO v2 Fetch Error: ${response.status} at ${endpoint}`);
-      return null;
+      return await response.json();
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (i === retries - 1) throw error;
+      await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
     }
-
-    return await response.json();
-  } catch (error) {
-    console.error(`SGO v2 Network Failure [${endpoint}]:`, error);
-    return null;
   }
 }
 
 /**
- * Normalizes SGO event status to CricketVue internal status.
+ * normalizeStatus() - Maps SportsMonk status codes to app-internal status.
  */
-function normalizeSgoStatus(event: any): 'upcoming' | 'live' | 'finished' {
-  if (event.status?.finalized || event.status?.ended) return 'finished';
-  if (event.status?.started) return 'live';
+function normalizeStatus(smStatus: string): 'upcoming' | 'live' | 'finished' {
+  const status = smStatus.toUpperCase();
+  const live = ['LIVE', 'INPLAY', '1ST', '2ND', 'HT', '2ND_HALF', '1ST_HALF'];
+  const finished = ['FT', 'AET', 'POSTP', 'CANCL', 'ABD', 'FINISHED'];
+  if (live.includes(status)) return 'live';
+  if (finished.includes(status)) return 'finished';
   return 'upcoming';
 }
 
 /**
- * Fetches all active Cricket events from SGO v2 with live odds.
+ * getLeagues() - Fetches all active Cricket leagues.
  */
-export async function fetchSgoCricketEvents(): Promise<ExternalMatch[]> {
-  const json = await fetchSgo('events', {
-    sportID: 'CRICKET',
-    oddsAvailable: 'true',
-    limit: '20'
-  });
+export async function getLeagues(): Promise<SportsMonkLeague[]> {
+  try {
+    const json = await fetchWithHeaders('cricket/leagues');
+    if (!json?.data) return [];
 
-  if (!json || !json.data) {
-    console.warn("No data returned from SGO v2 events endpoint.");
+    return json.data.map((league: any) => ({
+      id: league.id.toString(),
+      name: league.name,
+      sportId: league.sport_id,
+      countryId: league.country_id,
+      active: league.active,
+      updatedAt: new Date().toISOString()
+    }));
+  } catch (error) {
+    console.error("[SportsMonk] Failed to fetch leagues:", error);
     return [];
   }
-
-  return json.data.map((event: any) => {
-    const homeTeam = event.teams?.home?.name || event.teams?.home?.teamID || 'TBA';
-    const awayTeam = event.teams?.away?.name || event.teams?.away?.teamID || 'TBA';
-    
-    // SGO v2 Moneyline OddID patterns
-    // Format: {statID}-{statEntityID}-{periodID}-{betTypeID}-{sideID}
-    const homeMLPath = 'points-home-game-ml-home';
-    const awayMLPath = 'points-away-game-ml-away';
-    const fallbackHomeMLPath = 'points-all-game-ml-home';
-    const fallbackAwayMLPath = 'points-all-game-ml-away';
-
-    const getPrice = (oddID: string, altID: string) => {
-      const odd = event.odds?.[oddID] || event.odds?.[altID];
-      if (!odd) return undefined;
-      
-      // Prefer Pinnacle for professional sharp lines, fallback to DraftKings or first available
-      const bookmakers = odd.byBookmaker || {};
-      const bookie = bookmakers.pinnacle || bookmakers.draftkings || Object.values(bookmakers)[0];
-      return (bookie as any)?.odds;
-    };
-
-    const homeAmOdds = getPrice(homeMLPath, fallbackHomeMLPath);
-    const awayAmOdds = getPrice(awayMLPath, fallbackAwayMLPath);
-
-    const homeDec = americanToDecimal(homeAmOdds);
-    const awayDec = americanToDecimal(awayAmOdds);
-
-    return {
-      id: event.eventID,
-      name: `${homeTeam} v ${awayTeam}`,
-      teamA: homeTeam,
-      teamB: awayTeam,
-      startTime: event.status?.startsAt || new Date().toISOString(),
-      status: normalizeSgoStatus(event),
-      venue: event.venue || 'Global Stadium',
-      series: event.leagueID || 'International Series',
-      matchType: 'cricket',
-      odds: {
-        status: 'OPEN',
-        home: { 
-          back: [{ price: homeDec, size: 1000 }],
-          lay: [{ price: Number((homeDec + 0.05).toFixed(2)), size: 500 }]
-        },
-        away: { 
-          back: [{ price: awayDec, size: 1000 }],
-          lay: [{ price: Number((awayDec + 0.05).toFixed(2)), size: 500 }]
-        }
-      },
-      currentScore: event.status?.score?.display || '0-0',
-      statusText: event.status?.description || (event.status?.started ? 'In-Play' : 'Upcoming')
-    };
-  });
 }
 
 /**
- * Legacy compatibility wrappers.
+ * getFixturesWithOdds() - Fetches fixtures with nested odds/markets.
  */
-export async function fetchLiveScores(): Promise<ExternalMatch[]> {
-  return fetchSgoCricketEvents();
+export async function getFixturesWithOdds(): Promise<ExternalMatch[]> {
+  try {
+    const json = await fetchWithHeaders('cricket/fixtures', {
+      include: 'participants;venue;league;score;odds.market',
+    });
+
+    if (!json?.data) return [];
+
+    return json.data.map((fixture: any) => {
+      const homeTeamObj = fixture.participants?.find((p: any) => p.meta?.location === 'home');
+      const awayTeamObj = fixture.participants?.find((p: any) => p.meta?.location === 'away');
+      
+      const homeTeam = homeTeamObj?.name || 'TBA';
+      const awayTeam = awayTeamObj?.name || 'TBA';
+
+      const moneylineMarket = fixture.odds?.find((o: any) => 
+        o.market?.name?.toLowerCase().includes('winner') || 
+        o.market?.name?.toLowerCase().includes('moneyline')
+      );
+      
+      const homeBackOdds = moneylineMarket?.values?.find((v: any) => 
+        v.outcomes?.some((out: any) => out.name?.toLowerCase().includes('home') || out.name === homeTeam)
+      )?.value || 2.0;
+      
+      const awayBackOdds = moneylineMarket?.values?.find((v: any) => 
+        v.outcomes?.some((out: any) => out.name?.toLowerCase().includes('away') || out.name === awayTeam)
+      )?.value || 2.0;
+
+      return {
+        id: fixture.id.toString(),
+        name: `${homeTeam} v ${awayTeam}`,
+        teamA: homeTeam,
+        teamB: awayTeam,
+        startTime: fixture.starting_at || new Date().toISOString(),
+        status: normalizeStatus(fixture.status),
+        venue: fixture.venue?.name || 'Global Stadium',
+        series: fixture.league?.name || 'International Series',
+        matchType: 'cricket',
+        currentScore: fixture.score?.description || '0-0',
+        statusText: fixture.status || 'Scheduled',
+        odds: {
+          status: 'OPEN',
+          home: {
+            back: [{ price: Number(homeBackOdds), size: 1000 }],
+            lay: [{ price: Number((Number(homeBackOdds) + 0.05).toFixed(2)), size: 500 }]
+          },
+          away: {
+            back: [{ price: Number(awayBackOdds), size: 1000 }],
+            lay: [{ price: Number((Number(awayBackOdds) + 0.05).toFixed(2)), size: 500 }]
+          }
+        },
+        lastUpdated: new Date().toISOString()
+      };
+    });
+  } catch (error) {
+    console.error("[SportsMonk] Failed to fetch fixtures:", error);
+    return [];
+  }
 }
 
+/**
+ * fetchLiveScores() - Legacy compatibility wrapper.
+ */
+export async function fetchLiveScores(): Promise<ExternalMatch[]> {
+  return getFixturesWithOdds();
+}
+
+/**
+ * fetchPremiumFancy() - Legacy compatibility wrapper for micro-markets.
+ */
 export async function fetchPremiumFancy(eventId: string): Promise<any[]> {
-  // SGO v2 provides detailed props in the main events endpoint.
-  // For now, return empty to signify high-liquidity micro-markets suspended.
+  // TODO: Implement specific SportsMonk fancy market retrieval from fixture.odds
   return [];
+}
+
+/**
+ * syncSportsMonkData() - Master Sync Orchestrator
+ */
+export async function syncSportsMonkData() {
+  console.log("[SportsMonk] Initiating Universal Sync...");
+  const leagues = await getLeagues();
+  const fixtures = await getFixturesWithOdds();
+  return { leagues, fixtures };
 }

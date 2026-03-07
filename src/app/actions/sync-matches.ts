@@ -1,7 +1,7 @@
 'use client';
 
 import { Firestore, doc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
-import { syncSportsMonkData } from '@/services/sportsmonk-service';
+import { syncSportsMonkData } from '@/services/cricket-api-service';
 
 /**
  * SportsMonk Data Ingestion: Fetches fixtures and updates terminal state.
