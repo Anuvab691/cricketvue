@@ -101,10 +101,7 @@ async function fetchWithHeaders(endpoint: string, method: 'GET' | 'POST' = 'GET'
       clearTimeout(timer);
       console.error(`[Sportbex] Network Error [${endpoint}]:`, error.message);
       
-      // Don't retry if it's a 4xx error or we've run out of retries
       if (i === retries - 1) return null;
-      
-      // Wait before retrying (exponential backoff)
       await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000));
     }
   }
@@ -115,9 +112,8 @@ async function fetchWithHeaders(endpoint: string, method: 'GET' | 'POST' = 'GET'
 
 function normalizeEventStatus(status: string, scoreExists: boolean): 'upcoming' | 'live' | 'finished' {
   const s = (status || '').toUpperCase();
-  if (['FINISHED', 'COMPLETED', 'RESULT', 'FINISHED', 'ENDED'].includes(s)) return 'finished';
+  if (['FINISHED', 'COMPLETED', 'RESULT', 'ENDED'].includes(s)) return 'finished';
   if (['LIVE', 'INPLAY', 'IN-PLAY', 'IN PLAY'].includes(s)) return 'live';
-  // If score exists and it's not finished, it's likely live
   if (scoreExists && s !== 'UPCOMING') return 'live';
   return 'upcoming';
 }
@@ -137,7 +133,6 @@ export async function getCompetitions(sportId: string = '4'): Promise<ExternalSe
   if (!json || !json.data) return [];
   
   return json.data.map((c: any) => {
-    // Defensive parsing for varied competition keys
     const comp = c.competition || c;
     const id = comp.id || comp.competitionId;
     const name = comp.name || comp.competitionName;
@@ -168,7 +163,6 @@ export async function getEventsByCompetition(competitionId: string, sportId: str
 
     if (!id || !name) return null;
 
-    // Fuzzy split team names if possible, or use standard fields
     const teams = name.split(' v ');
     const home = teams[0] || 'TBA';
     const away = teams[1] || 'TBA';
@@ -191,12 +185,9 @@ export async function getEventsByCompetition(competitionId: string, sportId: str
 // --- HIERARCHY LAYER 3: MARKETS ---
 
 /**
- * Fetches markets for a specific event.
  * TODO: Confirm the exact Sportbex endpoint for standalone market lists if not included in event payload.
- * Currently uses the discovery logic provided in the Betfair/Sportbex bridge.
  */
 export async function getMarketsByEvent(eventId: string, sportId: string = '4'): Promise<ExternalMarket[]> {
-  // Often markets are returned as part of the listEventsByCompetition or a dedicated market endpoint
   const json = await fetchWithHeaders(`betfair/market/${sportId}/${eventId}`);
   if (!json || !json.data) return [];
 
@@ -211,10 +202,6 @@ export async function getMarketsByEvent(eventId: string, sportId: string = '4'):
 
 // --- HIERARCHY LAYER 4: ODDS ---
 
-/**
- * Professional implementation using listMarketBook POST protocol.
- * Returns normalized prices with Fail-Safe ladder handling.
- */
 export async function fetchMarketOdds(marketId: string) {
   const json = await fetchWithHeaders(`betfair/listMarketBook/4`, 'POST', {
     marketIds: [marketId]
@@ -223,7 +210,7 @@ export async function fetchMarketOdds(marketId: string) {
   const data = json?.data?.[0];
   if (!data) return null;
 
-  console.log(`[Odds Pulse] Market: ${marketId} | Status: ${data.status} | TotalMatched: ${data.totalMatched}`);
+  console.log(`[Odds Pulse] Market: ${marketId} | Status: ${data.status}`);
 
   return {
     marketId: data.marketId,
@@ -247,17 +234,11 @@ export async function fetchMarketOdds(marketId: string) {
   };
 }
 
-/**
- * Fetches high-frequency micro-market data (Bookmaker & Fancy).
- */
 export async function fetchFancyOdds(eventId: string, sportId: string = '4') {
   const json = await fetchWithHeaders(`betfair/fancy-bookmaker-odds/${sportId}/${eventId}`);
   return json?.data || null;
 }
 
-/**
- * Fetches Professional Premium Fancy data.
- */
 export async function fetchPremiumFancy(eventId: string) {
   const json = await fetchWithHeaders(`betfair/getPremium/4/${eventId}`);
   return json?.data || [];
@@ -265,9 +246,6 @@ export async function fetchPremiumFancy(eventId: string) {
 
 // --- LIVE DATA ACCESS ---
 
-/**
- * Fetches live scores for mapping with robust status detection.
- */
 export async function fetchLiveScores(): Promise<ExternalMatch[]> {
   const json = await fetchWithHeaders(`live-score/match/live`);
   if (!json || !json.data) return [];
@@ -275,13 +253,12 @@ export async function fetchLiveScores(): Promise<ExternalMatch[]> {
   return matchesArray.map((m: any) => transformLiveMatch(m));
 }
 
-export function transformLiveMatch(match: any): ExternalMatch {
+function transformLiveMatch(match: any): ExternalMatch {
   const home = match.t1_name || match.home_team_name || 'TBA';
   const away = match.t2_name || match.away_team_name || 'TBA';
   const score = match.current_score || match.score || '';
   const date = match.startDate || match.date || new Date().toISOString();
   
-  // Stable ID generation using names and date components
   const dateSeed = date.split('T')[0];
   const rawId = `${home}-${away}-${dateSeed}`.replace(/[^a-zA-Z0-9]/g, '-').toUpperCase();
 
@@ -301,18 +278,11 @@ export function transformLiveMatch(match: any): ExternalMatch {
 
 // --- ORCHESTRATION WORKFLOW ---
 
-/**
- * Full Hierarchy Synchronization Workflow.
- * Discovers Competitions -> Events -> Markets -> Odds.
- * Returns combined data objects ready for consumption or storage.
- */
 export async function syncSportbexHierarchy() {
   console.log("[Hierarchy Sync] Starting professional network discovery...");
   
   const results: any[] = [];
   const competitions = await getCompetitions('4');
-  
-  // Limit competitions to process to avoid rate limits/timeouts in a single job
   const activeComps = competitions.slice(0, 5);
 
   for (const comp of activeComps) {
@@ -322,8 +292,6 @@ export async function syncSportbexHierarchy() {
       if (!event.betfairEventId) continue;
       
       const markets = await getMarketsByEvent(event.betfairEventId, '4');
-      
-      // Focus on the primary Match Odds market
       const matchWinnerMarket = markets.find(m => 
         m.name.toLowerCase().includes('match odds') || 
         m.name.toLowerCase().includes('winner')
@@ -344,6 +312,5 @@ export async function syncSportbexHierarchy() {
     }
   }
 
-  console.log(`[Hierarchy Sync] Discovery complete. Found ${results.length} active event mappings.`);
   return results;
 }
