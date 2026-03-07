@@ -5,8 +5,8 @@
  * 
  * - fetchWithHeaders - Robust fetch helper with timeout and retries.
  * - fetchLiveMatches - Calls /live-score/match/live.
- * - normalizeLiveMatch - Maps Sportbex fields to app-internal ExternalMatch.
- * - getLiveMatches - Returns normalized live matches only.
+ * - normalizeLiveMatch - Maps Sportbex fields to internal app structure.
+ * - syncSportbexData - Master orchestrator for the terminal sync.
  */
 
 export interface ExternalMatch {
@@ -22,8 +22,13 @@ export interface ExternalMatch {
   currentScore: string;
   statusText: string;
   lastUpdated: string;
-  odds?: any; 
   series?: string;
+  odds?: {
+    status: string;
+    home: { back: any[]; lay: any[] };
+    away: { back: any[]; lay: any[] };
+    draw: { back: any[]; lay: any[] };
+  };
 }
 
 const SPORTBEX_BASE_URL = "https://trial-api.sportbex.com/api/";
@@ -40,7 +45,8 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
   }
 
   const queryParams = new URLSearchParams(params);
-  const url = `${SPORTBEX_BASE_URL}${endpoint.replace(/^\//, '')}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+  const url = `${SPORTBEX_BASE_URL}${cleanEndpoint}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
 
   for (let i = 0; i < retries; i++) {
     const controller = new AbortController();
@@ -87,22 +93,26 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
  * normalizeLiveMatch() - Maps Sportbex fields to consistent app structure.
  */
 function normalizeLiveMatch(match: any): ExternalMatch | null {
+  // Defensive mapping for team names
   const teamA = match.t1_name || match.home_team_name;
   const teamB = match.t2_name || match.away_team_name;
 
   if (!teamA || !teamB) return null;
 
-  const matchId = match.id?.toString() || `${teamA}-${teamB}-${match.startDate || match.date}`.replace(/\s+/g, '-').toLowerCase();
+  // Stable ID generation
+  const matchId = match.id?.toString() || 
+    `${teamA}-${teamB}-${match.startDate || match.date || Date.now()}`.replace(/\s+/g, '-').toLowerCase();
 
+  // Status normalization
   const rawStatus = (match.status || match.match_status || '').toUpperCase();
   let status: 'upcoming' | 'live' | 'finished' = 'upcoming';
-  if (['LIVE', 'INPLAY', 'IN_PROGRESS', '1ST INNINGS', '2ND INNINGS'].includes(rawStatus)) {
+  if (['LIVE', 'INPLAY', 'IN_PROGRESS', '1ST INNINGS', '2ND INNINGS', 'BAT'].includes(rawStatus)) {
     status = 'live';
   } else if (['COMPLETED', 'FINISHED', 'RESULT', 'ABANDONED'].includes(rawStatus)) {
     status = 'finished';
   }
 
-  const score = match.current_score || match.score || 'TBD';
+  const scoreText = match.current_score || match.score || 'TBD';
 
   return {
     id: matchId,
@@ -113,15 +123,17 @@ function normalizeLiveMatch(match: any): ExternalMatch | null {
     startTime: match.startDate || match.date || new Date().toISOString(),
     teamA,
     teamB,
-    score,
-    currentScore: score,
+    score: scoreText,
+    currentScore: scoreText,
     statusText: match.result?.message || match.status_text || match.status || 'Match in Progress',
     lastUpdated: new Date().toISOString(),
     series: match.series_name || match.series || 'Live Series',
+    // Simulated professional odds for the exchange interface
     odds: {
       status: 'OPEN',
       home: { back: [{ price: 1.91, size: 500 }], lay: [{ price: 1.95, size: 200 }] },
-      away: { back: [{ price: 1.91, size: 500 }], lay: [{ price: 1.95, size: 200 }] }
+      away: { back: [{ price: 1.91, size: 500 }], lay: [{ price: 1.95, size: 200 }] },
+      draw: { back: [{ price: 3.50, size: 100 }], lay: [{ price: 3.65, size: 50 }] }
     }
   };
 }
@@ -132,6 +144,7 @@ function normalizeLiveMatch(match: any): ExternalMatch | null {
 export async function fetchLiveMatches(): Promise<any[]> {
   try {
     const json = await fetchWithHeaders('live-score/match/live');
+    // Sportbex returns matches in data.matches or sometimes directly in data
     return json?.data?.matches || json?.data || [];
   } catch (error) {
     console.error("[Sportbex] Live fetch error:", error);
@@ -140,7 +153,7 @@ export async function fetchLiveMatches(): Promise<any[]> {
 }
 
 /**
- * getLiveMatches() - Public interface returning normalized matches.
+ * getLiveMatches() - Returns normalized matches for the UI.
  */
 export async function getLiveMatches(): Promise<ExternalMatch[]> {
   const matches = await fetchLiveMatches();
@@ -156,8 +169,14 @@ export async function syncSportbexData() {
   console.log("[Sportbex] Starting Live Network Sync...");
   const liveMatches = await getLiveMatches();
   console.log(`[Sportbex] Found ${liveMatches.length} active live matches.`);
-  return { fixtures: liveMatches, leagues: [] };
+  return { fixtures: liveMatches };
 }
 
-export async function fetchLiveScores() { return getLiveMatches(); }
-export async function fetchPremiumFancy(eventId: string) { return []; }
+export async function fetchLiveScores() {
+  return getLiveMatches();
+}
+
+export async function fetchPremiumFancy(eventId: string) {
+  // Placeholder for future premium fancy markets integration
+  return [];
+}

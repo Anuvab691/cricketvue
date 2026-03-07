@@ -1,10 +1,11 @@
 'use server';
 
 /**
- * @fileOverview This file has been deprecated and replaced by the Sportbex integration.
+ * @fileOverview DEPRECATED.
+ * This service has been replaced by the Sportbex API integration in cricket-api-service.ts.
  */
 
 export async function syncSportsMonkData() {
-  console.warn("SportsMonk service is deprecated. Use Sportbex via cricket-api-service instead.");
+  console.warn("[SportsMonk] Service is deprecated. Re-routing to Sportbex.");
   return { leagues: [], fixtures: [] };
 }
