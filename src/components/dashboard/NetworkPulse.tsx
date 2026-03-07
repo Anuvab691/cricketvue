@@ -5,14 +5,13 @@ import { useFirestore, useUser, useDoc } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { syncCricketMatchesAction } from '@/app/actions/sync-matches';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
-import { Zap, Loader2 } from 'lucide-react';
+import { Zap, Loader2, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
- * NetworkPulse: Automated background service.
- * Performs a seamless professional sync every 10 seconds 
- * to ensure scores and Betfair odds are updated in real-time
- * without removing existing matches from the view.
+ * NetworkPulse: Background Data Ingestion Engine.
+ * Only users with elevated roles (admin/super) trigger the professional 
+ * ingestion workflow every 10 seconds.
  */
 export function NetworkPulse() {
   const firestore = useFirestore();
@@ -27,23 +26,18 @@ export function NetworkPulse() {
   const { data: userData } = useDoc(userRef);
 
   useEffect(() => {
-    // Only Admin or Super roles trigger the background sync pulse
     if (!firestore || !userData || (userData.role !== 'admin' && userData.role !== 'super')) return;
 
-    const performPulse = async () => {
+    const performIngestion = async () => {
       setIsSyncing(true);
-      // Background professional sync (updates existing records seamlessly)
-      // We removed clearFirst: true to prevent UI flickering/matches vanishing
+      // Master Sync: Fetches full hierarchy and updates odds/scores
       await syncCricketMatchesAction(firestore);
       setLastPulse(new Date().toLocaleTimeString());
       setIsSyncing(false);
     };
 
-    // Initial Pulse on load
-    performPulse();
-
-    // 10-second high-frequency refresh interval
-    const interval = setInterval(performPulse, 10000);
+    performIngestion();
+    const interval = setInterval(performIngestion, 10000);
 
     return () => clearInterval(interval);
   }, [firestore, userData]);
@@ -51,13 +45,13 @@ export function NetworkPulse() {
   if (!userData || (userData.role !== 'admin' && userData.role !== 'super')) return null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 bg-slate-900 border border-white/5 rounded-sm shadow-inner transition-all">
+    <div className="flex items-center gap-2 px-3 py-1 bg-slate-900 border border-white/5 rounded-sm shadow-inner transition-all group">
       <div className="relative">
-        <Zap 
+        <Database 
           size={12} 
           className={cn(
-            "text-yellow-400 transition-all",
-            isSyncing ? "animate-pulse scale-110 drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]" : "opacity-50"
+            "text-accent transition-all",
+            isSyncing ? "animate-pulse scale-110" : "opacity-50"
           )} 
         />
         {isSyncing && (
@@ -68,10 +62,10 @@ export function NetworkPulse() {
       </div>
       <div className="flex flex-col">
         <span className="text-[9px] font-black uppercase text-white tracking-widest leading-none">
-          {isSyncing ? 'Auto-Syncing Network...' : 'Network Active'}
+          {isSyncing ? 'Ingesting Data...' : 'Ingestion Active'}
         </span>
         <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">
-          Last Pulse: {lastPulse}
+          Pulse: {lastPulse}
         </span>
       </div>
     </div>
