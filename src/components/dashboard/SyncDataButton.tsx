@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -9,7 +8,11 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useMemoFirebase } from '@/firebase/use-memo-firebase';
+import { cn } from '@/lib/utils';
 
+/**
+ * SyncDataButton: Triggers the SportsMonk v3 Data Ingestion Engine.
+ */
 export function SyncDataButton() {
   const firestore = useFirestore();
   const { user } = useUser();
@@ -30,7 +33,10 @@ export function SyncDataButton() {
     const result = await syncCricketMatchesAction(firestore);
     setLoading(false);
     if (result.success) {
-      toast({ title: "Network Updated", description: `Successfully synced ${result.count} matches.` });
+      toast({ 
+        title: "SportsMonk Network Updated", 
+        description: `Successfully synced ${result.count} fixtures across ${result.tournamentsCount} leagues.` 
+      });
     } else {
       toast({ title: "Sync Failed", description: result.error, variant: "destructive" });
     }
@@ -42,7 +48,7 @@ export function SyncDataButton() {
     const result = await clearAllMatchesAction(firestore);
     setLoading(false);
     if (result.success) {
-      toast({ title: "Feed Cleared", description: "All match data removed from terminal." });
+      toast({ title: "Terminal Purged", description: "All fixtures and tournament data removed." });
     } else {
       toast({ title: "Purge Failed", description: result.error, variant: "destructive" });
     }
@@ -58,7 +64,7 @@ export function SyncDataButton() {
         className="h-8 text-[10px] font-black uppercase italic tracking-tighter border-white/20 bg-white/10 text-white hover:bg-primary hover:border-primary transition-all"
       >
         <RefreshCw className={cn("w-3 h-3 mr-1.5", loading && "animate-spin")} />
-        Sync Now
+        {loading ? 'Syncing...' : 'Sync SportsMonk'}
       </Button>
       {userData.role === 'admin' && (
         <Button 
@@ -69,11 +75,9 @@ export function SyncDataButton() {
           className="h-8 text-[10px] font-black uppercase italic tracking-tighter border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all"
         >
           <Trash2 className="w-3 h-3 mr-1.5" />
-          Purge All
+          Purge Feed
         </Button>
       )}
     </div>
   );
 }
-
-import { cn } from '@/lib/utils';
