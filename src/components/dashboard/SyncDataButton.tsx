@@ -11,7 +11,7 @@ import { useMemoFirebase } from '@/firebase/use-memo-firebase';
 import { cn } from '@/lib/utils';
 
 /**
- * SyncDataButton: Triggers the SportsMonk v3 Data Ingestion Engine.
+ * SyncDataButton: Triggers the Sportbex Live Data Ingestion Engine.
  */
 export function SyncDataButton() {
   const firestore = useFirestore();
@@ -24,7 +24,6 @@ export function SyncDataButton() {
   }, [firestore, user?.uid]);
   const { data: userData } = useDoc(userRef);
 
-  // Only allow Admin/Super users to sync or clear the feed
   if (!userData || (userData.role !== 'admin' && userData.role !== 'super')) return null;
 
   const handleSync = async () => {
@@ -34,8 +33,8 @@ export function SyncDataButton() {
     setLoading(false);
     if (result.success) {
       toast({ 
-        title: "SportsMonk Network Updated", 
-        description: `Successfully synced ${result.count} fixtures across ${result.tournamentsCount} leagues.` 
+        title: "Live Terminal Updated", 
+        description: `Successfully synced ${result.count} live matches from Sportbex.` 
       });
     } else {
       toast({ title: "Sync Failed", description: result.error, variant: "destructive" });
@@ -48,7 +47,7 @@ export function SyncDataButton() {
     const result = await clearAllMatchesAction(firestore);
     setLoading(false);
     if (result.success) {
-      toast({ title: "Terminal Purged", description: "All fixtures and tournament data removed." });
+      toast({ title: "Terminal Purged", description: "All match data removed." });
     } else {
       toast({ title: "Purge Failed", description: result.error, variant: "destructive" });
     }
@@ -64,7 +63,7 @@ export function SyncDataButton() {
         className="h-8 text-[10px] font-black uppercase italic tracking-tighter border-white/20 bg-white/10 text-white hover:bg-primary hover:border-primary transition-all"
       >
         <RefreshCw className={cn("w-3 h-3 mr-1.5", loading && "animate-spin")} />
-        {loading ? 'Syncing...' : 'Sync SportsMonk'}
+        {loading ? 'Syncing...' : 'Sync Now'}
       </Button>
       {userData.role === 'admin' && (
         <Button 

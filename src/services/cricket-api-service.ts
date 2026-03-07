@@ -22,7 +22,7 @@ export interface ExternalMatch {
   currentScore: string;
   statusText: string;
   lastUpdated: string;
-  odds?: any; // To be populated if odds endpoint is identified
+  odds?: any; 
   series?: string;
 }
 
@@ -87,16 +87,13 @@ async function fetchWithHeaders(endpoint: string, params: Record<string, string>
  * normalizeLiveMatch() - Maps Sportbex fields to consistent app structure.
  */
 function normalizeLiveMatch(match: any): ExternalMatch | null {
-  // Defensive check for required fields
   const teamA = match.t1_name || match.home_team_name;
   const teamB = match.t2_name || match.away_team_name;
 
   if (!teamA || !teamB) return null;
 
-  // ID fallback logic
   const matchId = match.id?.toString() || `${teamA}-${teamB}-${match.startDate || match.date}`.replace(/\s+/g, '-').toLowerCase();
 
-  // Status normalization logic
   const rawStatus = (match.status || match.match_status || '').toUpperCase();
   let status: 'upcoming' | 'live' | 'finished' = 'upcoming';
   if (['LIVE', 'INPLAY', 'IN_PROGRESS', '1ST INNINGS', '2ND INNINGS'].includes(rawStatus)) {
@@ -105,7 +102,6 @@ function normalizeLiveMatch(match: any): ExternalMatch | null {
     status = 'finished';
   }
 
-  // Score mapping
   const score = match.current_score || match.score || 'TBD';
 
   return {
@@ -122,7 +118,6 @@ function normalizeLiveMatch(match: any): ExternalMatch | null {
     statusText: match.result?.message || match.status_text || match.status || 'Match in Progress',
     lastUpdated: new Date().toISOString(),
     series: match.series_name || match.series || 'Live Series',
-    // Mock odds for UI compatibility since /live doesn't always provide bookmaker markets
     odds: {
       status: 'OPEN',
       home: { back: [{ price: 1.91, size: 500 }], lay: [{ price: 1.95, size: 200 }] },
@@ -137,7 +132,6 @@ function normalizeLiveMatch(match: any): ExternalMatch | null {
 export async function fetchLiveMatches(): Promise<any[]> {
   try {
     const json = await fetchWithHeaders('live-score/match/live');
-    // Support both data.matches and data directly
     return json?.data?.matches || json?.data || [];
   } catch (error) {
     console.error("[Sportbex] Live fetch error:", error);
@@ -165,7 +159,5 @@ export async function syncSportbexData() {
   return { fixtures: liveMatches, leagues: [] };
 }
 
-// Backward compatibility wrappers for existing actions
 export async function fetchLiveScores() { return getLiveMatches(); }
 export async function fetchPremiumFancy(eventId: string) { return []; }
-export async function syncSportsMonkData() { return syncSportbexData(); }

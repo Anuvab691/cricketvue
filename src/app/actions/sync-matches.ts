@@ -43,8 +43,7 @@ export async function syncCricketMatchesAction(db: Firestore) {
 
     await batch.commit();
 
-    // 3. Pruning: Remove matches no longer in the live feed (optional, depends on use-case)
-    // For now, we only keep live matches in the terminal dashboard
+    // 3. Pruning: Remove matches no longer in the live feed
     const existingSnap = await getDocs(collection(db, 'matches'));
     const pruneBatch = writeBatch(db);
     let prunedCount = 0;
@@ -64,10 +63,10 @@ export async function syncCricketMatchesAction(db: Firestore) {
       success: true, 
       count: activeMatchIds.size, 
       pruned: prunedCount,
-      tournamentsCount: 0 // Sportbex live endpoint doesn't return separate league objects
+      tournamentsCount: 0 
     };
   } catch (error: any) {
-    console.error("Sportbex Sync Failure:", error);
+    console.error("[Terminal Sync] Failure:", error);
     return { success: false, error: error.message };
   }
 }
